@@ -1,160 +1,50 @@
+# Wall-E Line Following & Maze Solving
 
-<p align="center">
-  <img src="documentation/images/logo.png"/>
-  
-  <h3 align="center"> Wall-E version 2.7 </h3>
-  <p align="center">
-    Code repository for <a href="https://github.com/SRA-VJTI/Wall-E">Wall-E_v2.7</a>
-    <br />
-    <br />
-    <a href="https://github.com/SRA-VJTI/Wall-E/issues">Report Bug</a>
-    ·
-    <a href="https://github.com/SRA-VJTI/Wall-E/issues">Request Feature</a>
-    ·
-    <a href="https://github.com/SRA-VJTI/Wall-E/pulls">Send a Pull Request</a>
-  </p>
- </p>
- 
- <p align="center">
-  
-  <a href="https://github.com/SRA-VJTI/Wall-E/network/members">
-    <img src="https://img.shields.io/github/forks/SRA-VJTI/Wall-E">
-  </a>
-  <a href="https://github.com/SRA-VJTI/Wall-E/stargazers">
-    <img src="https://img.shields.io/github/stars/SRA-VJTI/Wall-E">
-  </a>
-  <a href="https://github.com/SRA-VJTI/Wall-E/issues">
-    <img src="https://img.shields.io/github/issues/SRA-VJTI/Wall-E">
-  </a>
-  <a href="https://github.com/SRA-VJTI/Wall-E/blob/master/LICENSE">
-    <img src="https://img.shields.io/github/license/SRA-VJTI/Wall-E">
-  </a>
-</p>
+Line following and maze solving firmware for the SRA-VJTI **Wall-E** bot (ESP32 + SRA development board), trimmed down from [SRA-VJTI/Wall-E](https://github.com/SRA-VJTI/Wall-E) to the line following parts only.
 
 ## Table of Contents
-- [About the Workshop](#about-the-workshop)
-- [Architecture](#architecture)
+- [Hardware](#hardware)
 - [Installation](#installation)
 - [Examples](#examples)
-- [Resources](#resources)
-- [Contribution](#contribution)
+- [Running the Examples](#running-the-examples)
+- [PID Tuning over WiFi](#pid-tuning-over-wifi)
 - [License](#license)
 
-## About the Workshop
-<p align="center">
-  <img width = 600 src="documentation/images/walle_v2.7.jpeg"/>
-  <a href="https://github.com/SRA-VJTI/Wall-E-Sim">
-  <h3 align="center"> Wall-E </h3>
-  </a>
-</p>
-
-<p align="center">
-
-| <img height="350" src="documentation/images/self_balancing.gif"> | <img height="350" src="documentation/images/oled.jpg"> | <img height="350" src="documentation/images/led_matrix.gif"> |
-:-------------------------:|:-------------------------:|:-------------------------:
-Wall-E Bot Self-Balancing | Wall-E Bot with OLED Display | Wall-E Bot with LED Matrix
-
-Wall-E is a two-wheeled educational **self balancing** and **line following** robot developed by **SRA-VJTI**, designed to teach embedded robotics concepts such as  **control theory (PID)**, and **embedded communication**. The brain of the robot is an **ESP32** microcontroller paired with a custom-made SRA development board.
-
-This repository hosts the firmware, demo projects, and study material used in SRA VJTI's Wall-E workshop. With features like inbuilt Wi-Fi support and BLE, and extensive application in several domains like IoT, RF, etc, The workshop entails various essential concepts such as PID Control, Embedded Communication Protocols, PWM, Filters, RTOS, etc. and gives its attendees (first-year students) a general idea about the world of robotics and embedded hardware.
-
-## Architecture
-
-### Hardware  
-- **ESP32 Microcontroller**: central processing, sensor reading, control loops  
-- **SRA Development Board**: custom PCB that connects ESP32 to sensors, motor drivers, power supply, etc.
-- **Sensors** 
-  - MPU6050 IMU (gyro + accelerometer) for self balancing  
-  - Light Sensor Array (LSA) for line following  
-- **Actuators**: Dual DC motors (controlled via PWM)  
-- **Communication**: I2C, SPI, UART for peripheral communication  
-- **User Interface** 
-  - (Optional) OLED display for local feedback
-### Software  
-- Built using **ESP-IDF**, leveraging tasks in FreeRTOS.  
-- WebSocket interface for real-time tuning : dynamic tuning via WebSocket without reflashing firmware.  
-- runs Conway's Game of Life on the SRA Board LED matrix using ESP-IDF
-
----
-
+## Hardware
+- **ESP32** on the SRA development board
+- **Line Sensor Array (LSA)**: 5 analog sensors, white line on black
+- **Dual DC motors** driven by PWM through the board's motor driver
+- **OLED** (optional): shows Kp / Ki / Kd, the bot's IP and the maze node count
+- Two wheels plus a front ball caster (not self balancing)
 
 ## Installation
-
-- For Installation, please refer to [these instructions](Installations.md)
-- You can also refer to [Step-by-Step official guide by espressif](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/#installation-step-by-step)
+- Follow [these instructions](Installations.md), or the [official ESP-IDF guide](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/#installation-step-by-step).
+- Clone with the board library submodule:
+```bash
+git clone --recursive <this repo>
+# or, if already cloned
+git submodule update --init components/sra-board-component
+```
 
 ## Examples
 
-|                  TOPIC                  |                                                        Link                                                         |                                          Description                                           |
-| :-------------------------------------: | :-----------------------------------------------------------------------------------------------------------------: | :--------------------------------------------------------------------------------------------: |
-|                LED Matrix                |              [LED_Matrix](https://github.com/SRA-VJTI/Wall-E/blob/master/1_led_matrix/README.md)               |                     Performing LED Blink by connecting the LED with esp32                      |
-|           Light Sensing Array           |                    [LSA](https://github.com/SRA-VJTI/Wall-E/blob/master/2_LSA/README.md)                     |        Sensing Array that uses different Light Sensors, majorly used for Line-Following        |
-|                 MPU6050                 |                    [MPU](https://github.com/SRA-VJTI/Wall-E/blob/master/3_MPU/README.md)                     |           Motion controlled MPU measures angles with respect to 6 Degrees of Freedom           |
-|         Pulse Width Modulation          |                    [PWM](https://github.com/SRA-VJTI/Wall-E/blob/master/5_PWM/README.md)                     |                    Calculate average voltage and controls speed accordingly                    |
-|             Line-Following              |              [Line_Following](https://github.com/SRA-VJTI/Wall-E/tree/master/6_line_following/)     |         Line-Following algorithm that enables the bot to follow the path of white line         |
-|             Self-Balancing              |         [Self_Balancing](https://github.com/SRA-VJTI/Wall-E/blob/master/7_self_balancing/README.md)          | Self-Balancing algorithm that enables the bot to balance its weight under the force of gravity |
+| Example | Description |
+|---|---|
+| [2_LSA](2_LSA/) | Reads the line sensor array. Use it to check sensor order and white / black thresholds. |
+| [5_line_following](5_line_following/) | PID line follower with PID tuning from a web page over WiFi. |
+| [7_maze_solving](7_maze_solving/) | Everything in 5_line_following plus 90° corners, 45° sharp turns, dead end U-turns, junction (node) handling with straight-first priority, a node counter and stopping at the end zone. |
 
-## Running the Example Projects
+All examples use the SRA board library in [components/sra-board-component](components/).
 
-
-### 1. Choose an Example
-Navigate to one of the examples in the examples directory under Wall-E.
+## Running the Examples
 ```bash
-cd components/sra-board-component/examples/<example_name>
-```
-### 2. Configure
-Opens the ESP-IDF configuration menu where you can set project options, enable features, and adjust hardware settings.
-```bash
-idf.py menuconfig
-```
-### 3. Build and Flash
-Builds the project, flashes it to the ESP32, and starts the serial monitor to view real-time logs.
-```bash
-idf.py build
-idf.py flash
-idf.py monitor
+cd 7_maze_solving        # or any other example
+idf.py menuconfig        # set WiFi SSID / password under "Wall-E Configuration"
+idf.py build flash monitor
 ```
 
-## Resources
-
-- Please visit and look at our [Custom-made SRA development board](https://github.com/SRA-VJTI/sra-board-hardware-design)
-- Visit ESP-IDF SRA board [Components](https://github.com/SRA-VJTI/sra-board-hardware-design) to have a detailed information about the components of SRA board 
-<p align="center">
-  <img src="documentation/images/board_v2.7.jpeg"/>
-  <h3 align="center"> SRA development board </h3>
-  </p>
-
-<!-- CONTRIBUTING -->
-
-## Contribution
-
-Contributions are what make the open source community such an amazing place to be learn, inspire, and create. Any contributions you make are **extremely appreciated**.
-- See the [open issues](https://github.com/SRA-VJTI/Wall-E/issues) for a list of proposed features (and known issues).
-
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-<!-- LICENSE -->
+## PID Tuning over WiFi
+5_line_following and 7_maze_solving join the WiFi network set in `idf.py menuconfig` → *Wall-E Configuration → WiFi Config*. Once connected, the IP is shown on the OLED and in the serial monitor. Open it (or `http://walle-tuning.local`) from a device on the same network and change Kp, Ki and Kd while the bot runs.
 
 ## License
-
-- Distributed under the [MIT License](https://github.com/SRA-VJTI/Wall-E/blob/master/LICENSE)
-
-<!-- CONTACT -->
-
-
-[forks-shield]:https://img.shields.io/github/forks/SRA-VJTI/Wall-E
-[forks-url]: https://github.com/HarshShah03325/Wall-E/network/members
-[stars-shield]: https://img.shields.io/github/stars/SRA-VJTI/Wall-E
-[stars-url]: https://github.com/SRA-VJTI/Wall-E/stargazers
-[issues-shield]: https://img.shields.io/github/issues/SRA-VJTI/Wall-E
-[issues-url]: https://github.com/SRA-VJTI/Wall-E/issues
-[license-shield]: https://img.shields.io/github/license/SRA-VJTI/Wall-E
-[license-url]: https://github.com/SRA-VJTI/Wall-E/blob/master/LICENSE
-
-
-
-
+Distributed under the [MIT License](LICENSE). Based on [SRA-VJTI/Wall-E](https://github.com/SRA-VJTI/Wall-E).
