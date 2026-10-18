@@ -7,7 +7,7 @@
 #include "lwip/ip4_addr.h"
 
 #define MODE NORMAL_MODE
-#define BLACK_MARGIN 4095
+#define BLACK_MARGIN 4095 //TESTED VALUE CAN CHANGE <<<<<<<<<=========================
 #define WHITE_MARGIN 0
 #define bound_LSA_LOW 0
 #define bound_LSA_HIGH 1000
@@ -21,9 +21,9 @@ const int weights[5] = {-5, -3, 1, 3, 5};
 /*
  * Motor value boundts
  */
-int optimum_duty_cycle = 57;
-int lower_duty_cycle = 45;
-int higher_duty_cycle = 65;
+int optimum_duty_cycle = 35;
+int lower_duty_cycle = 20;
+int higher_duty_cycle = 50;
 float left_duty_cycle = 0, right_duty_cycle = 0;
 
 /*

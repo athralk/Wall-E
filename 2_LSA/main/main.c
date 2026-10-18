@@ -8,7 +8,8 @@
 // SRA's custom header file including additional functions
 #include "sra_board.h"
 
-// tested Margin Value Constants for Black and White Surfaces
+// tested Margin Value Constants for Black and White Surfaces 
+// ==================================>>>>>>>>>>>> KEY WORD: TESTED MEANING CAN BE DIFFERENT 
 #define BLACK_MARGIN 4095
 #define WHITE_MARGIN 0
 

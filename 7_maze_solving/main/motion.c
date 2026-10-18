@@ -1,3 +1,6 @@
+/*
+ * Signed motor control on top of the SRA motor driver, see motion.h
+ */
 #include "motion.h"
 #include "sra_board.h"
 
@@ -9,6 +12,10 @@ esp_err_t motion_init(void)
     return enable_motor_driver(&motor_right, MOTOR_A_1);
 }
 
+/*
+ * Drives one wheel: positive duty = forward, negative = backward.
+ * Capped at +-50 so no state can run the motors harder than that.
+ */
 static void set_wheel(motor_handle_t motor, float duty)
 {
     duty = bound(duty, -50, 50);
@@ -30,6 +37,7 @@ void drive(float left_duty, float right_duty)
 
 void pivot(int dir, float duty)
 {
+    // dir = +1 (right): left wheel forward, right wheel backward. dir = -1 is the mirror.
     drive(dir * duty, -dir * duty);
 }
 

@@ -1,3 +1,31 @@
+/*
+ * Maze solving for Wall-E: PID line following plus 90 / 45 degree turns,
+ * junctions (nodes), dead ends and the end zone.
+ *
+ * Everything runs in maze_task() as a state machine. Each loop (LOOP_MS) it
+ * reads the sensor bar once, then runs the code for the current state:
+ *
+ *   FOLLOW    normal PID line following. Watches for side branches, sharp
+ *             turns and the line disappearing.
+ *     -> APPROACH  side branch seen (11100 / 00111 / 11111)
+ *     -> SHARP     line only under an outer sensor (10000 / 00001)
+ *     -> UTURN     line vanished while it was centred (dead end)
+ *     -> SEARCH    line vanished while it was off to one side
+ *
+ *   APPROACH  drive straight for APPROACH_MS so the wheels sit on the junction,
+ *             then decide: end zone, go straight, or turn (choose_exit)
+ *     -> DONE / FOLLOW / PIVOT / SEARCH
+ *
+ *   PIVOT     spin in place until the centre sensor lands on the new line -> FOLLOW
+ *   SHARP     swing toward a 45 degree turn until the centre finds it    -> FOLLOW
+ *   UTURN     spin ~180 degrees at a dead end                             -> FOLLOW
+ *   SEARCH    sweep left / right, wider each time, until the line is back -> FOLLOW
+ *   DONE      end zone reached, motors stopped
+ *
+ * Any turn that takes too long falls back to SEARCH.
+ * The bar graph LEDs show the current state (see maze_state_t) and every state
+ * change is logged on the serial monitor with the sensor pattern.
+ */
 #include <stdio.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
@@ -15,9 +43,9 @@ static const char *TAG = "maze";
 /*
  * Line following speeds (same as the tuned 5_line_following example)
  */
-#define BASE_DUTY 35
+#define BASE_DUTY 30
 #define MIN_DUTY 25
-#define MAX_DUTY 50
+#define MAX_DUTY 45
 
 /*
  * 90 degree corners: line suddenly covers one side of the bar (11100 / 00111).
@@ -68,8 +96,11 @@ static const char *TAG = "maze";
 #define SEARCH_DUTY 50
 #define SEARCH_TIMEOUT_MS 800   // flip search direction after this, doubles each flip
 
-#define LOOP_MS 10
+#define LOOP_MS 10              // control loop period
 
+/*
+ * A side branch = centre sensor plus both sensors on that side
+ */
 #define LEFT_CORNER_MASK (LSA_BIT(0) | LSA_BIT(1) | LSA_BIT(2))
 #define RIGHT_CORNER_MASK (LSA_BIT(2) | LSA_BIT(3) | LSA_BIT(4))
 
@@ -108,8 +139,11 @@ static uint32_t now_ms(void)
 }
 
 static maze_state_t state = STATE_FOLLOW;
-static uint32_t state_start_ms;
+static uint32_t state_start_ms;     // when the current state started, for the timeouts
 
+/*
+ * Switches state: logs it, restarts the state timer and updates the bar graph
+ */
 static void set_state(maze_state_t next, const lsa_state_t *lsa)
 {
     ESP_LOGI(TAG, "%s -> %s after %lu ms  pattern %d%d%d%d%d", state_name(state), state_name(next),
@@ -137,8 +171,8 @@ static int detect_branches(const lsa_state_t *lsa)
     return branches;
 }
 
-static int node_count = 0;
-static bool node_count_changed = true;
+static int node_count = 0;              // junctions passed so far, shown on the OLED as "N: x"
+static bool node_count_changed = true;  // redraw the OLED on the next update_display()
 
 typedef enum
 {
@@ -205,7 +239,9 @@ static int detect_sharp(const lsa_state_t *lsa)
 }
 
 /*
- * Counts how many loops in a row the same non-zero direction was seen
+ * Counts how many loops in a row the same non-zero direction was seen.
+ * Used so one noisy reading can't trigger a turn: the caller only acts once
+ * the count reaches CORNER_CONFIRM / SHARP_CONFIRM.
  */
 static int confirm(int dir, int *last_dir, int *count)
 {
@@ -221,6 +257,10 @@ static int confirm(int dir, int *last_dir, int *count)
     return *count;
 }
 
+/*
+ * Redraws the OLED (Kp / Ki / Kd, IP, node count) only when something changed,
+ * since drawing is slow. Only called from FOLLOW and DONE so it never delays a turn.
+ */
 static void update_display(void)
 {
     pid_const_t k = read_pid_const();
@@ -252,6 +292,9 @@ static void update_display(void)
     node_count_changed = false;
 }
 
+/*
+ * Starts a 45 degree swing: outer wheel forward, inner wheel backward
+ */
 static void start_sharp(int dir)
 {
     if (dir < 0)
@@ -260,6 +303,10 @@ static void start_sharp(int dir)
         drive(SHARP_OUTER_DUTY, -SHARP_INNER_DUTY);
 }
 
+/*
+ * Ends a pivot / U-turn: short spin the other way to cancel momentum, stop,
+ * and clear the PID so the old error doesn't jerk the bot
+ */
 static void finish_turn(int brake_dir)
 {
     pivot(brake_dir, BRAKE_DUTY);
@@ -268,6 +315,9 @@ static void finish_turn(int brake_dir)
     pid_reset();
 }
 
+/*
+ * Main loop, see the state list at the top of this file
+ */
 void maze_task(void *arg)
 {
     ESP_ERROR_CHECK(motion_init());
@@ -283,9 +333,9 @@ void maze_task(void *arg)
 #endif
 
     lsa_state_t lsa;
-    int node_seen = 0, node_confirm = 0;
-    int sharp_dir = 0, sharp_count = 0;
-    int lost_count = 0;
+    int node_seen = 0, node_confirm = 0;    // confirm() counters for side branches
+    int sharp_dir = 0, sharp_count = 0;     // confirm() counters for 45 degree turns
+    int lost_count = 0;                     // loops in a row with no line under the bar
     int turn_dir = 0;               // direction of the current turn / search, -1 left, +1 right
     int seen_branches = 0;          // side branches seen while driving over a node
     bool left_old_line = false;     // pivot: centre sensor has come off the line we turned from
@@ -304,10 +354,15 @@ void maze_task(void *arg)
 
         switch (state)
         {
+        /*
+         * FOLLOW: checks run in priority order - junction, sharp turn, line lost,
+         * and only if none of those fire, plain PID following
+         */
         case STATE_FOLLOW:
         {
             update_display();
 
+            // 1. Side branch held for CORNER_CONFIRM loops: drive onto the junction
             int branches = detect_branches(&lsa);
             if (confirm(branches ? 1 : 0, &node_seen, &node_confirm) >= CORNER_CONFIRM)
             {
@@ -318,6 +373,7 @@ void maze_task(void *arg)
                 break;
             }
 
+            // 2. Line has slid out to an outer sensor: 45 degree turn
             if (confirm(detect_sharp(&lsa), &sharp_dir, &sharp_count) >= SHARP_CONFIRM)
             {
                 turn_dir = sharp_dir;
@@ -328,6 +384,7 @@ void maze_task(void *arg)
                 break;
             }
 
+            // 3. No line at all: dead end or overshoot, decided by where the line was last seen
             if (lsa.count == 0)
             {
                 if (++lost_count >= LOST_CONFIRM)
@@ -341,6 +398,7 @@ void maze_task(void *arg)
                         pivot(UTURN_DIR, TURN_DUTY);
                         break;
                     }
+                    // Line slipped off one side: search toward the side it was last on
                     turn_dir = pid_last_error() >= 0 ? 1 : -1;
                     search_timeout = SEARCH_TIMEOUT_MS;
                     set_state(STATE_SEARCH, &lsa);
@@ -350,14 +408,20 @@ void maze_task(void *arg)
                 break;
             }
             lost_count = 0;
+            // Remember if the line is near the middle, used for the dead end check above
             last_centred = !lsa.on_line[0] && !lsa.on_line[4];
 
+            // 4. Normal PID following: speed up one wheel and slow the other
             float correction = pid_compute(lsa.position);
             drive(bound(BASE_DUTY + correction, MIN_DUTY, MAX_DUTY),
                   bound(BASE_DUTY - correction, MIN_DUTY, MAX_DUTY));
             break;
         }
 
+        /*
+         * APPROACH: the sensor bar is ahead of the wheels, so drive forward until the
+         * wheels are on the junction, then look at what is under the bar to decide
+         */
         case STATE_APPROACH:
             // A cross can show 11100 first and 11111 a moment later, so keep collecting
             seen_branches |= detect_branches(&lsa);
@@ -373,11 +437,14 @@ void maze_task(void *arg)
                     break;
                 }
 
+                // Exits available here. Straight = line still under the middle of the bar.
                 bool left = seen_branches & BRANCH_LEFT;
                 bool right = seen_branches & BRANCH_RIGHT;
                 bool straight = lsa.on_line[1] || lsa.on_line[2] || lsa.on_line[3];
+                // One exit = just a corner, two or more = a node (counted)
                 bool is_node = left + right + straight >= 2;
 
+                // Look up this node's entry in NODE_PLAN, 'A' (auto) if there is none
                 char plan = 'A';
                 if (is_node)
                 {
@@ -398,6 +465,7 @@ void maze_task(void *arg)
                     after_uturn = false;
                 }
 
+                // Act on the choice: carry on, turn, or search if nothing was found
                 if (choice == EXIT_STRAIGHT)
                 {
                     pid_reset();
@@ -421,6 +489,10 @@ void maze_task(void *arg)
             }
             break;
 
+        /*
+         * PIVOT: spin in place. First the centre sensor must leave the line we were on,
+         * then the turn ends as soon as it lands on the next line.
+         */
         case STATE_PIVOT:
             if (!lsa.on_line[2])
             {
@@ -445,6 +517,10 @@ void maze_task(void *arg)
             }
             break;
 
+        /*
+         * UTURN: spin until the centre finds the line we came in on. after_uturn makes
+         * the next node skip straight, which would lead back toward this dead end.
+         */
         case STATE_UTURN:
             if (elapsed >= UTURN_MIN_MS && lsa.on_line[2])
             {
@@ -465,6 +541,9 @@ void maze_task(void *arg)
             }
             break;
 
+        /*
+         * SHARP: keep swinging (started by start_sharp) until the centre sensor is on the line
+         */
         case STATE_SHARP:
             if (lsa.on_line[2])
             {
@@ -483,6 +562,10 @@ void maze_task(void *arg)
             }
             break;
 
+        /*
+         * SEARCH: last resort. Pivot one way, then back the other way for twice as long,
+         * until any of the middle three sensors sees the line.
+         */
         case STATE_SEARCH:
             if (lsa.on_line[1] || lsa.on_line[2] || lsa.on_line[3])
             {
@@ -504,6 +587,7 @@ void maze_task(void *arg)
             }
             break;
 
+        // DONE: end zone, stay stopped (reset the board to run again)
         case STATE_DONE:
             stop();
             update_display();
@@ -516,6 +600,9 @@ void maze_task(void *arg)
     vTaskDelete(NULL);
 }
 
+/*
+ * Starts WiFi + the PID tuning web page, then the maze task
+ */
 void app_main()
 {
     start_tuning_http_server();
