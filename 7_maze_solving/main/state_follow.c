@@ -5,7 +5,7 @@
  *   0. pink drop zone          -> DROP     (drop_zone.c)
  *   1. side branch (junction)  -> APPROACH (state_junction.c)
  *   2. 45 degree turn          -> SHARP
- *   3. line gone               -> UTURN if it was centred (dead end), else SEARCH
+ *   3. line gone               -> UTURN if it was centred (dead end), else BACKTRACK / SEARCH
  *   4. none of the above: PID
  *
  * Checks 1-3 are skipped (bot drives straight if it sees no line) for START_HOLD_MS
@@ -20,6 +20,7 @@
 #include "junction.h"
 #include "drop_zone.h"
 #include "display.h"
+#include "backtrack.h"
 
 static const char *TAG = "maze";
 
@@ -42,12 +43,28 @@ void handle_follow(maze_ctx_t *ctx)
         return;
     }
 
+    // Start hold only lasts until the line is first found, so the first corner isn't missed
+    if (!ctx->seen_line && lsa->count > 0)
+    {
+        ctx->seen_line = true;
+        ctx->hold_until_ms = 0;
+    }
     bool hold = now_ms() < ctx->hold_until_ms;
 
     if (!hold)
     {
-        // 1. Side branch held for CORNER_CONFIRM loops: drive onto the junction
+        // 1. Side branch held for CORNER_CONFIRM loops: drive onto the junction.
+        //    After a junction / turn, wait for one plain line reading first, so a bot
+        //    still sitting on the same junction can't count it again
         int branches = detect_branches(lsa);
+        if (branches == 0)
+        {
+            ctx->junction_armed = true;
+        }
+        if (!ctx->junction_armed)
+        {
+            branches = 0;
+        }
         if (confirm(branches ? 1 : 0, &ctx->node_seen, &ctx->node_confirm) >= CORNER_CONFIRM)
         {
             ctx->node_seen = ctx->node_confirm = 0;
@@ -94,9 +111,10 @@ void handle_follow(maze_ctx_t *ctx)
         }
         else if (ctx->lost_count >= LOST_CONFIRM)
         {
-            // Line slipped off one side: search toward the side it was last on
+            // Line slipped off one side: back up to where it was, or search toward
+            // the side it was last on
             ctx->lost_count = 0;
-            start_search(ctx, pid_last_error() >= 0 ? 1 : -1);
+            start_lost(ctx, pid_last_error() >= 0 ? 1 : -1);
         }
         // else brief gap: keep the last motor output going
         return;
@@ -104,6 +122,11 @@ void handle_follow(maze_ctx_t *ctx)
     ctx->lost_count = 0;
     // Remember if the line is near the middle, used for the dead end check above
     ctx->last_centred = !lsa->on_line[0] && !lsa->on_line[4];
+    if (ctx->last_centred && lsa->on_line[2])
+    {
+        // Line right under the middle: a good spot to backtrack to
+        backtrack_mark_good();
+    }
 
     // 4. Normal PID following: speed up one wheel and slow the other
     float correction = pid_compute(lsa->position);

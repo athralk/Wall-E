@@ -36,6 +36,7 @@ void back_to_follow(maze_ctx_t *ctx)
 {
     pid_reset();
     ctx->last_centred = true;
+    ctx->junction_armed = false;
     set_state(ctx, STATE_FOLLOW);
 }
 
@@ -92,8 +93,8 @@ void handle_pivot(maze_ctx_t *ctx)
 
     if (state_elapsed(ctx) >= PIVOT_TIMEOUT_MS)
     {
-        ESP_LOGW(TAG, "pivot timed out, searching");
-        start_search(ctx, ctx->turn_dir);
+        ESP_LOGW(TAG, "pivot timed out");
+        start_lost(ctx, ctx->turn_dir);
     }
 }
 
@@ -110,8 +111,8 @@ void handle_sharp(maze_ctx_t *ctx)
 
     if (state_elapsed(ctx) >= SHARP_TIMEOUT_MS)
     {
-        ESP_LOGW(TAG, "sharp turn timed out, searching");
-        start_search(ctx, ctx->turn_dir);
+        ESP_LOGW(TAG, "sharp turn timed out");
+        start_lost(ctx, ctx->turn_dir);
     }
 }
 
@@ -131,8 +132,8 @@ void handle_uturn(maze_ctx_t *ctx)
 
     if (state_elapsed(ctx) >= UTURN_TIMEOUT_MS)
     {
-        ESP_LOGW(TAG, "U-turn timed out, searching");
-        start_search(ctx, UTURN_DIR);
+        ESP_LOGW(TAG, "U-turn timed out");
+        start_lost(ctx, UTURN_DIR);
     }
 }
 
@@ -162,10 +163,32 @@ void handle_search(maze_ctx_t *ctx)
 }
 
 /*
- * DONE: end zone, stay stopped (reset the board to run again)
+ * DONE: end zone, stay stopped. If it stopped by mistake, put the bot back on a line:
+ * once the line has been under the bar (and the bar isn't all white) for RESUME_MS,
+ * it carries on as if just switched on.
  */
 void handle_done(maze_ctx_t *ctx)
 {
     stop();
     display_update(ctx);
+
+    bool on_a_line = ctx->lsa.count > 0 && ctx->lsa.raw_white_count < LSA_COUNT;
+    if (!on_a_line)
+    {
+        ctx->line_seen_since_ms = 0;
+        return;
+    }
+    if (ctx->line_seen_since_ms == 0)
+    {
+        ctx->line_seen_since_ms = now_ms();
+        return;
+    }
+    if (now_ms() - ctx->line_seen_since_ms >= RESUME_MS)
+    {
+        ESP_LOGI(TAG, "put back on a line, resuming");
+        ctx->line_seen_since_ms = 0;
+        ctx->seen_line = false;
+        ctx->hold_until_ms = now_ms() + START_HOLD_MS;
+        back_to_follow(ctx);
+    }
 }

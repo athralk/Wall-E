@@ -12,7 +12,8 @@
  *   UTURN     state_turns.c     180 degree spin (dead end, after the drop zone)
  *   SEARCH    state_turns.c     sweep to find a lost line
  *   DROP      drop_zone.c       pink zone: stop, back off, then UTURN
- *   DONE      state_turns.c     end zone, stopped
+ *   BACKTRACK backtrack.c       confused: reverse along the path back to the last good spot
+ *   DONE      state_turns.c     end zone, stopped (resumes if put back on a line)
  *
  * The colour blind section has no state of its own: colour_blind.c flips the
  * sensor polarity and FOLLOW keeps going as normal.
@@ -29,6 +30,7 @@ typedef enum
 {
     STATE_FOLLOW = 0x1,
     STATE_APPROACH = 0x2,
+    STATE_BACKTRACK = 0x3,
     STATE_PIVOT = 0x4,
     STATE_SHARP = 0x6,
     STATE_SEARCH = 0x8,
@@ -48,13 +50,21 @@ typedef struct
     int sharp_dir, sharp_count;     // confirm() counters for 45 degree turns
     int lost_count;                 // loops in a row with no line under the bar
     bool last_centred;              // line was in the middle of the bar the last time we saw it
-    uint32_t hold_until_ms;         // after a colour flip: skip junction / sharp / dead end checks until then
+    uint32_t hold_until_ms;         // start / colour flip: skip junction / sharp / dead end checks until then
+    bool junction_armed;            // false after leaving a junction / turn, true again once the bar
+                                    // sees a plain line, so one junction can't be counted twice
+    bool seen_line;                 // line found since power on / resume (ends the start hold)
 
     // Turns
     int turn_dir;                   // direction of the current turn / search, -1 left, +1 right
     int seen_branches;              // side branches seen while driving over a junction
     bool left_old_line;             // pivot: centre sensor has come off the line we turned from
     uint32_t search_timeout;        // SEARCH: how long before sweeping the other way
+
+    // Recovery
+    int backtrack_count;            // backtracks in a row, see BACKTRACK_TRIES
+    uint32_t last_backtrack_ms;
+    uint32_t line_seen_since_ms;    // DONE: when the line appeared under the bar (0 = not seen)
 
     // Progress through the maze
     int node_count;                 // junctions passed so far, "N: x" on the OLED
@@ -85,6 +95,11 @@ void start_search(maze_ctx_t *ctx, int dir);
 void back_to_follow(maze_ctx_t *ctx);
 
 /*
+ * Confused: backtrack if there is history and tries left, otherwise SEARCH toward dir (backtrack.c)
+ */
+void start_lost(maze_ctx_t *ctx, int dir);
+
+/*
  * One handler per state, called every loop while in that state
  */
 void handle_follow(maze_ctx_t *ctx);
@@ -94,6 +109,7 @@ void handle_sharp(maze_ctx_t *ctx);
 void handle_uturn(maze_ctx_t *ctx);
 void handle_search(maze_ctx_t *ctx);
 void handle_drop(maze_ctx_t *ctx);
+void handle_backtrack(maze_ctx_t *ctx);
 void handle_done(maze_ctx_t *ctx);
 
 #endif

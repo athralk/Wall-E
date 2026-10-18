@@ -6,7 +6,7 @@
  *   - whole bar still white         -> end zone, DONE
  *   - one exit                      -> plain corner, not counted
  *   - two or more exits             -> node, counted, exit picked by choose_exit()
- * then go straight (FOLLOW), turn (PIVOT) or, if nothing is there, SEARCH.
+ * then go straight (FOLLOW), turn (PIVOT) or, if nothing is there, BACKTRACK / SEARCH.
  */
 #include "sra_board.h"
 #include "config.h"
@@ -47,6 +47,7 @@ void handle_approach(maze_ctx_t *ctx)
     }
     if (all_white)
     {
+        ctx->line_seen_since_ms = 0;
         stop();
         ESP_LOGI(TAG, "END zone reached, %d nodes", ctx->node_count);
         set_state(ctx, STATE_DONE);
@@ -65,6 +66,7 @@ void handle_approach(maze_ctx_t *ctx)
     {
         ctx->node_count++;
         ctx->display_dirty = true;
+        ctx->backtrack_count = 0;   // made progress, backtracking is allowed again
         plan = node_plan_for(ctx->node_count);
     }
 
@@ -84,7 +86,7 @@ void handle_approach(maze_ctx_t *ctx)
     }
     else if (choice == EXIT_NONE)
     {
-        start_search(ctx, TURN_PREFERENCE);
+        start_lost(ctx, TURN_PREFERENCE);
     }
     else
     {

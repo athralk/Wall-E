@@ -5,6 +5,7 @@
 #include "sra_board.h"
 
 static motor_handle_t motor_left, motor_right;
+static float last_left = 0, last_right = 0;
 
 esp_err_t motion_init(void)
 {
@@ -31,6 +32,8 @@ static void set_wheel(motor_handle_t motor, float duty)
 
 void drive(float left_duty, float right_duty)
 {
+    last_left = left_duty;
+    last_right = right_duty;
     set_wheel(motor_left, left_duty);
     set_wheel(motor_right, right_duty);
 }
@@ -43,6 +46,13 @@ void pivot(int dir, float duty)
 
 void stop(void)
 {
+    last_left = last_right = 0;
     set_motor_speed(motor_left, MOTOR_STOP, 0);
     set_motor_speed(motor_right, MOTOR_STOP, 0);
+}
+
+void motion_last(float *left_duty, float *right_duty)
+{
+    *left_duty = last_left;
+    *right_duty = last_right;
 }

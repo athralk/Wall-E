@@ -12,10 +12,11 @@ The bot runs a small state machine every 10 ms. The current state is shown on th
 | APPROACH | 0010 | 90° corner seen (`11100` / `00111`): drives straight so the wheels sit over the corner | `APPROACH_MS` passes. If the line is still ahead it was only a curve, back to FOLLOW |
 | PIVOT | 0100 | Spins in place toward the corner until the centre sensor finds the new line, then a short reverse brake | Centre sensor on the line, or timeout → SEARCH |
 | SHARP | 0110 | 45° turn: line only under the outermost sensors (`10000` / `11000`). Outer wheel forward, inner wheel backward | Centre sensor on the line, or timeout → SEARCH |
+| BACKTRACK | 0011 | Confused (line lost to one side, a turn timed out, no exit at a junction): replays the last wheel commands in reverse back to where the line was last centred | Centre sensor on the line → FOLLOW. History used up, or `BACKTRACK_TRIES` in a row → SEARCH |
 | SEARCH | 1000 | Line lost after it slid to one side: spins toward that side, sweeping wider each time | Any middle sensor finds the line |
 | DROP | 1001 | Pink drop zone under the middle sensors: stops, backs off the object | Then UTURN |
 | UTURN | 1100 | Dead end (line ended while centred) or after DROP: spins 180° | Centre sensor back on the line after `UTURN_MIN_MS` |
-| DONE | 1111 | End zone (whole bar still white after driving onto it): stopped | - |
+| DONE | 1111 | End zone (whole bar still white after driving onto it): stopped | Put it back on a line for `RESUME_MS` and it carries on |
 
 ## Nodes
 
@@ -49,6 +50,7 @@ Read them in this order:
 | `main/junction.c` | Pattern checks (`detect_branches`, `detect_sharp`), `choose_exit`, `NODE_PLAN` |
 | `main/state_turns.c` | PIVOT, SHARP, UTURN, SEARCH, DONE |
 | `main/colour_blind.c` | Flips the sensor polarity for the black-on-white section |
+| `main/backtrack.c` | Records the wheel commands and plays them backwards when confused |
 | `main/drop_zone.c` | Pink detection and the DROP state |
 | `main/display.c` | OLED: Kp / Ki / Kd, IP, node count, `INV` |
 | `main/line_sensor.c` | Reads the LSA, decides which sensors see the line, computes line position (-5..+5) |

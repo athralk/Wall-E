@@ -23,7 +23,7 @@
  * Drive forward until the axle is over the corner, then pivot in place onto the new line.
  */
 #define CORNER_CONFIRM 2        // loops a side branch pattern must hold before we treat it as a corner / node
-#define APPROACH_DUTY 30        // straight drive to bring the axle over the corner
+#define APPROACH_DUTY 40        // straight drive to bring the axle over the corner. Too low and the bot stalls on the junction
 #define APPROACH_MS 150         // depends on sensor bar to axle distance, tune on track
 #define TURN_DUTY 55            // pivot speed
 #define PIVOT_MIN_MS 40         // ignore the line for this long after starting a pivot
@@ -67,9 +67,24 @@
  */
 #define LOST_CONFIRM 3          // loops with no line before we start searching
 #define DEADEND_CONFIRM 8       // loops with no line (driving straight) before a dead end U-turn
-#define START_HOLD_MS 1000      // at power on: drive straight onto the line, no dead end / junction checks
+#define START_HOLD_MS 1000      // at power on: drive straight until the line is found (ends as soon as it is)
 #define SEARCH_DUTY 50
 #define SEARCH_TIMEOUT_MS 800   // flip search direction after this, doubles each flip
+
+/*
+ * Backtrack: when confused (line lost off to one side, a turn timed out, a junction with
+ * no exit), replay the last wheel commands in reverse to drive back to where the line was
+ * last centred under the bar, then carry on. Falls back to SEARCH if that doesn't work.
+ */
+#define BACKTRACK_MAX_MS 1500   // how much driving history is kept (= the furthest it will back up)
+#define BACKTRACK_TRIES 2       // backtracks in a row before giving up and searching instead
+#define BACKTRACK_RESET_MS 3000 // the tries count resets after this long without a backtrack
+
+/*
+ * End zone stop. If the bot stopped by mistake, put it back on the line: after the line has
+ * been under the bar for RESUME_MS it carries on by itself (also handy for checkpoint repositions).
+ */
+#define RESUME_MS 1000
 
 /*
  * Colour blind section: black line on a white block. When both outer sensors see the line

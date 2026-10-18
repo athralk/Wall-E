@@ -20,6 +20,7 @@
 #include "line_sensor.h"
 #include "motion.h"
 #include "colour_blind.h"
+#include "backtrack.h"
 
 static const char *TAG = "maze";
 
@@ -43,6 +44,7 @@ static const char *state_name(maze_state_t state)
     case STATE_SHARP: return "SHARP";
     case STATE_SEARCH: return "SEARCH";
     case STATE_DROP: return "DROP";
+    case STATE_BACKTRACK: return "BACKTRACK";
     case STATE_UTURN: return "UTURN";
     case STATE_DONE: return "DONE";
     }
@@ -126,7 +128,14 @@ void maze_task(void *arg)
         case STATE_UTURN: handle_uturn(&ctx); break;
         case STATE_SEARCH: handle_search(&ctx); break;
         case STATE_DROP: handle_drop(&ctx); break;
+        case STATE_BACKTRACK: handle_backtrack(&ctx); break;
         case STATE_DONE: handle_done(&ctx); break;
+        }
+
+        // Remember how the wheels were driven this loop, so BACKTRACK can undo it
+        if (ctx.state != STATE_BACKTRACK && ctx.state != STATE_DONE && ctx.state != STATE_DROP)
+        {
+            backtrack_record();
         }
 
         vTaskDelay(LOOP_MS / portTICK_PERIOD_MS);
