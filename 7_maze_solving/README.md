@@ -1,6 +1,6 @@
 # MAZE SOLVING
 
-Line follower for maze tracks (white line on black). It does everything [5_line_following](../5_line_following) does (PID line following, PID tuning from the web page over WiFi, Kp/Ki/Kd on the OLED) and adds handling for **90 degree corners** and **45 degree sharp turns**.
+Line follower for maze tracks (white line on black). It does everything [5_line_following](../5_line_following) does (PID line following, PID tuning from the web page over WiFi, Kp/Ki/Kd on the OLED) and adds **90 degree corners**, **45 degree sharp turns**, nodes, dead end U-turns, the **colour blind** section, the **pink drop zone** and stopping at the end zone.
 
 ## How it works
 
@@ -13,7 +13,8 @@ The bot runs a small state machine every 10 ms. The current state is shown on th
 | PIVOT | 0100 | Spins in place toward the corner until the centre sensor finds the new line, then a short reverse brake | Centre sensor on the line, or timeout → SEARCH |
 | SHARP | 0110 | 45° turn: line only under the outermost sensors (`10000` / `11000`). Outer wheel forward, inner wheel backward | Centre sensor on the line, or timeout → SEARCH |
 | SEARCH | 1000 | Line lost after it slid to one side: spins toward that side, sweeping wider each time | Any middle sensor finds the line |
-| UTURN | 1100 | Dead end (line ended while centred): spins 180° | Centre sensor back on the line after `UTURN_MIN_MS` |
+| DROP | 1001 | Pink drop zone under the middle sensors: stops, backs off the object | Then UTURN |
+| UTURN | 1100 | Dead end (line ended while centred) or after DROP: spins 180° | Centre sensor back on the line after `UTURN_MIN_MS` |
 | DONE | 1111 | End zone (whole bar still white after driving onto it): stopped | - |
 
 ## Nodes
@@ -26,12 +27,31 @@ Exit choice: **straight first**, then `TURN_PREFERENCE`, then the other turn. Ri
 
 Sensor patterns are read left to right, `1` = sensor on the white line.
 
+## Colour blind section
+
+A white block with a black line down the middle. When both outer sensors see the line and the centre doesn't (`11011` / `10001`), the polarity is wrong, so `colour_blind.c` flips it and black counts as the line. FOLLOW then steers toward the black line as usual (just averaging the white would steer *away* from it when the bot drifts). The same check flips it back once the white line returns, and an all-white bar while inverted (the block's end edge) also flips back. For `INVERT_HOLD_MS` after a flip the bot only PIDs straight, so the block's edges aren't taken as a junction or dead end. The OLED shows `INV` and the serial log prints `colour blind: ON / OFF`.
+
+## Pink drop zone
+
+The LSA only sees brightness, so pink is a band of readings between black and white. **Calibrate before running:** set `LOG_READINGS 1` in `config.h`, hold the bar over the pink square, and set `PINK_MIN` / `PINK_MAX` around the middle three values printed (the defaults are placeholders). The bot pushes the object along the line, stops when the middle sensors read pink for `PINK_CONFIRM` loops, backs off, U-turns and carries on. This only happens once per run.
+
 ## Files
+
+Read them in this order:
 
 | File | Purpose |
 |---|---|
-| `main/maze_solving.c` | `app_main`, the state machine and all turn tunables (`#define`s at the top) |
-| `main/line_sensor.c` | Reads the LSA, decides which sensors see the white line, computes line position (-5..+5) |
+| `main/include/config.h` | **Every tunable number.** The only file you should edit while tuning |
+| `main/include/maze.h` | List of states, the shared `maze_ctx_t` struct, which file handles which state |
+| `main/maze_solving.c` | `app_main` and the loop: read sensors → colour blind check → run the state's handler |
+| `main/state_follow.c` | FOLLOW: pink, junction, sharp turn and line lost checks, then PID |
+| `main/state_junction.c` | APPROACH: end zone, node counting, picking the exit |
+| `main/junction.c` | Pattern checks (`detect_branches`, `detect_sharp`), `choose_exit`, `NODE_PLAN` |
+| `main/state_turns.c` | PIVOT, SHARP, UTURN, SEARCH, DONE |
+| `main/colour_blind.c` | Flips the sensor polarity for the black-on-white section |
+| `main/drop_zone.c` | Pink detection and the DROP state |
+| `main/display.c` | OLED: Kp / Ki / Kd, IP, node count, `INV` |
+| `main/line_sensor.c` | Reads the LSA, decides which sensors see the line, computes line position (-5..+5) |
 | `main/motion.c` | `drive()` with signed duty (negative = backward), `pivot()`, `stop()` |
 | `main/pid.c` | PID correction using the gains from the web page, `pid_reset()` after turns |
 | `main/tuning_http_server.c`, `main/wifi_handler.c`, `frontend/` | PID tuning web page, same as 5_line_following |
@@ -48,5 +68,6 @@ Sensor patterns are read left to right, `1` = sensor on the white line.
 2. `APPROACH_MS` so the bot pivots with its wheels on the corner (too small: cuts the corner, too large: overshoots past it).
 3. `TURN_DUTY` and `BRAKE_MS` so the pivot stops on the new line without overshoot.
 4. `SHARP_OUTER_DUTY` / `SHARP_INNER_DUTY` for 45° turns.
+5. `PINK_MIN` / `PINK_MAX` (see above), then `DROP_REVERSE_MS` so the U-turn clears the object.
 
 Every state change is printed on the serial monitor with the sensor pattern and how long the previous state lasted.
