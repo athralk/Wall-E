@@ -34,11 +34,6 @@ void line_sensor_set_inverted(bool value)
     inverted = value;
 }
 
-bool line_sensor_is_inverted(void)
-{
-    return inverted;
-}
-
 void line_sensor_update(lsa_state_t *state)
 {
     line_sensor_array raw = read_line_sensor(line_sensor);
@@ -46,7 +41,6 @@ void line_sensor_update(lsa_state_t *state)
 
     state->pattern = 0;
     state->count = 0;
-    state->raw_white_count = 0;
 
     for (int i = 0; i < LSA_COUNT; i++)
     {
@@ -58,10 +52,6 @@ void line_sensor_update(lsa_state_t *state)
 
         // Threshold into on / off the line
         bool on = value > WHITE_BOUNDARY;
-        if (on)
-        {
-            state->raw_white_count++;
-        }
         if (inverted)
         {
             on = !on;

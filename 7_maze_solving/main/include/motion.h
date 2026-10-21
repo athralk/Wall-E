@@ -33,10 +33,4 @@ void pivot(int dir, float duty);
  */
 void stop(void);
 
-/*
- * The duties from the last drive() / pivot() / stop() call (0 after stop),
- * recorded every loop for backtracking
- */
-void motion_last(float *left_duty, float *right_duty);
-
 #endif

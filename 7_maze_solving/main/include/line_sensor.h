@@ -34,7 +34,6 @@ typedef struct
     uint8_t pattern;          // on_line packed as bits, see LSA_BIT
     int count;                // number of sensors on the line (0 = line lost, 5 = all white)
     float position;           // -5 (line under left) .. +5 (line under right), only valid if count > 0
-    int raw_white_count;      // sensors seeing white, ignoring the inverted flag
 } lsa_state_t;
 
 /*
@@ -48,11 +47,9 @@ esp_err_t line_sensor_init(void);
 void line_sensor_update(lsa_state_t *state);
 
 /*
- * Swaps which colour counts as the line, used by colour_blind.c for the
- * section where the track becomes a black line on white
+ * Swaps which colour counts as the line (hook for the colour blind section,
+ * where the track becomes a black line on white). Not used yet.
  */
 void line_sensor_set_inverted(bool inverted);
-
-bool line_sensor_is_inverted(void);
 
 #endif
