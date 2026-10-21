@@ -10,19 +10,16 @@ The bot runs a small state machine every 10 ms. The current state is shown on th
 |---|---|---|---|
 | FOLLOW | 0001 | Normal PID line following | A corner, sharp turn or lost line is detected |
 | APPROACH | 0010 | 90° corner seen (`11100` / `00111`): drives straight so the wheels sit over the corner | `APPROACH_MS` passes. If the line is still ahead it was only a curve, back to FOLLOW |
-| PIVOT | 0100 | Spins in place toward the corner until the centre sensor finds the new line, then a short reverse brake | Centre sensor on the line, or timeout → SEARCH |
-| SHARP | 0110 | 45° turn: line only under the outermost sensors (`10000` / `11000`). Outer wheel forward, inner wheel backward | Centre sensor on the line, or timeout → SEARCH |
-| BACKTRACK | 0011 | Confused (line lost to one side, a turn timed out, no exit at a junction): replays the last wheel commands in reverse back to where the line was last centred | Centre sensor on the line → FOLLOW. History used up, or `BACKTRACK_TRIES` in a row → SEARCH |
+| TURN | 0100 | Every turn in place (90° pivot, 45° / acute left, U-turn): spins until the centre sensor has left the old line and lands on a line, then a short reverse brake. Speed `TURN_DUTY` | Centre sensor on a line, or timeout → SEARCH |
 | SEARCH | 1000 | Line lost after it slid to one side: spins toward that side, sweeping wider each time | Any middle sensor finds the line |
-| DROP | 1001 | Pink drop zone under the middle sensors: stops, backs off the object | Then UTURN |
-| UTURN | 1100 | Dead end (line ended while centred) or after DROP: spins 180° | Centre sensor back on the line after `UTURN_MIN_MS` |
+| DROP | 1001 | Pink drop zone under the middle sensors: stops, backs off the object | Then a U-turn (TURN) |
 | DONE | 1111 | End zone (whole bar still white after driving onto it): stopped | Put it back on a line for `RESUME_MS` and it carries on |
 
 ## Nodes
 
 APPROACH collects every exit at a junction: left / right from the side sensors while driving over it, straight from the middle sensors once the wheels are on it. A junction with 2+ exits is a **node** and is counted (`N:` on the OLED, `node N` in the serial log).
 
-Exit choice: **straight first**, then `TURN_PREFERENCE`, then the other turn. Right after a dead end U-turn, straight leads back the way we came, so a turn is taken instead.
+Exit choice: **straight first**, then `TURN_PREFERENCE`, then the other turn. Every node is remembered (`node_memory.c`): if the exit taken leads to a dead end, the bot U-turns, comes back to that node and takes the next exit it hasn't tried. If every exit of a node was a dead end, it heads back to the node before and does the same there.
 
 `NODE_PLAN` overrides the choice per node, one character per node in order: `A` auto, `S` straight, `L` left, `R` right. Do one practice run, read the `node N exits ...` lines in the serial monitor, and force the nodes where straight-first goes the wrong way (e.g. the branch to the pink drop zone).
 
@@ -47,10 +44,10 @@ Read them in this order:
 | `main/maze_solving.c` | `app_main` and the loop: read sensors → colour blind check → run the state's handler |
 | `main/state_follow.c` | FOLLOW: pink, junction, sharp turn and line lost checks, then PID |
 | `main/state_junction.c` | APPROACH: end zone, node counting, picking the exit |
+| `main/node_memory.c` | Remembers nodes and tried exits, picks the next exit after a dead end |
 | `main/junction.c` | Pattern checks (`detect_branches`, `detect_sharp`), `choose_exit`, `NODE_PLAN` |
-| `main/state_turns.c` | PIVOT, SHARP, UTURN, SEARCH, DONE |
+| `main/state_turns.c` | TURN (pivot / sharp / U-turn), SEARCH, DONE |
 | `main/colour_blind.c` | Flips the sensor polarity for the black-on-white section |
-| `main/backtrack.c` | Records the wheel commands and plays them backwards when confused |
 | `main/drop_zone.c` | Pink detection and the DROP state |
 | `main/display.c` | OLED: Kp / Ki / Kd, IP, node count, `INV` |
 | `main/line_sensor.c` | Reads the LSA, decides which sensors see the line, computes line position (-5..+5) |
@@ -69,7 +66,7 @@ Read them in this order:
 1. PID on a straight line and gentle curves (web page).
 2. `APPROACH_MS` so the bot pivots with its wheels on the corner (too small: cuts the corner, too large: overshoots past it).
 3. `TURN_DUTY` and `BRAKE_MS` so the pivot stops on the new line without overshoot.
-4. `SHARP_OUTER_DUTY` / `SHARP_INNER_DUTY` for 45° turns.
+4. `TURN_DUTY` for every turn in place, `KICK_DUTY` / `KICK_MS` if the bot sits still after a turn.
 5. `PINK_MIN` / `PINK_MAX` (see above), then `DROP_REVERSE_MS` so the U-turn clears the object.
 
 Every state change is printed on the serial monitor with the sensor pattern and how long the previous state lasted.
