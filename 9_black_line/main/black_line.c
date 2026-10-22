@@ -1,6 +1,7 @@
 /*
- * 9_black_line: Wall-E follows the LEFT EDGE of the white line, black on its left,
- * white on its right. See bot.h for the states, config.h for every tunable.
+ * 9_black_line: Wall-E follows the centre of the line, or (once EDGE_AFTER_MS is set)
+ * its LEFT EDGE, black on its left and white on its right.
+ * See bot.h for the states, config.h for every tunable.
  *
  * Why the edge: A0 and A1 sit on black the whole time, so white under them can only be
  * a line coming in from the left, never a wobble. And losing the white always means

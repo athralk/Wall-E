@@ -20,10 +20,11 @@
  * Symmetric weights, scaled by POSITION_SCALE so position spans -5..+5
  * like the error range the original line_following example was tuned with
  */
-static const int weights[LSA_COUNT] = {-5, -3, 0, 3, 5};
+static const int weights[LSA_COUNT] = {-2, -1, 0, 1, 2};
 #define POSITION_SCALE 2.5f
 
 static adc_handle_t line_sensor;
+static lsa_state_t latest;      // last reading, for the live LSA web page
 static bool inverted = false;   // true = black counts as the line (colour blind section)
 static volatile bool ir_latched = false;    // side IR went onto white since the last update
 
@@ -180,6 +181,7 @@ void line_sensor_update(lsa_state_t *state)
     // Coarse position from the on / off flags: average weight of the sensors on the line,
     // 0 = centred, negative = line is to the left. Only a few possible values.
     state->position = state->count ? (weighted_sum / state->count) * POSITION_SCALE : 0;
+    latest = *state;
 
 #if ANALOG_CENTERING
     // Fine position from the analog readings, like wall centering on the micromouse
@@ -190,4 +192,9 @@ void line_sensor_update(lsa_state_t *state)
         state->position = analog_position(state->reading);
     }
 #endif
+}
+
+lsa_state_t line_sensor_latest(void)
+{
+    return latest;
 }

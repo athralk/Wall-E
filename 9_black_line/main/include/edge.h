@@ -2,8 +2,8 @@
 #define EDGE_H
 
 /*
- * What the sensor bar says about the left edge of the white line.
- * Normal following: black under A0 A1, white from A2 on (00111).
+ * What the sensor bar says about the line: its centre (centre mode) or its left edge
+ * (edge mode: black under A0 A1, white from A2 on, 00111).
  */
 
 #include <stdbool.h>
@@ -15,19 +15,16 @@
 int edge_first_white(const lsa_state_t *lsa);
 
 /*
- * PID error: 0 = edge at its place, negative = edge moved left (steer left),
- * positive = edge moved right (steer right)
+ * PID errors, -5..+5: negative = line / edge is left of its place (steer left),
+ * positive = right of it (steer right). Both are smooth (from the analog readings),
+ * so the steering doesn't jump a whole sensor at a time.
  */
+float centre_error(const lsa_state_t *lsa);
 float edge_error(const lsa_state_t *lsa);
 
 /*
- * White under A0 and A1: a line coming in from the left (branch, corner, cross, T)
+ * Edge mode: white under A0 and A1, a line coming in from the left
  */
 bool edge_left_branch(const lsa_state_t *lsa);
-
-/*
- * Edge back at its place: A0 A1 black, A2 white. Ends every turn.
- */
-bool edge_on_target(const lsa_state_t *lsa);
 
 #endif

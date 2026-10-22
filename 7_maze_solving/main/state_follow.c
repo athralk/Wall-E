@@ -2,24 +2,29 @@
  * FOLLOW state: normal PID line following.
  *
  * Every loop it checks, in this order, and hands off to another state if one fires:
- *   0. pink drop zone          -> DROP     (drop_zone.c)
- *   1. side branch (junction)  -> APPROACH (state_junction.c)
- *   2. 45 degree turn          -> TURN (sharp)
- *   3. line gone               -> TURN toward a separate side line seen just before (acute exit),
- *                                 TURN (U-turn) if it was centred (dead end), else SEARCH
- *   4. none of the above: PID
+ *   1. side branch (junction)  -> APPROACH (state_junction.c), then a 90 degree turn
+ *   2. line gone               -> TURN_120 toward a separate side line seen just before
+ *                                 (acute exit), U-turn if it was centred (dead end),
+ *                                 else SEARCH toward where it was
+ *   3. none of the above: PID line following. Curves and 45 degree bends are just followed
+ *      (the PID steers round them), no turn state needed
+ * (Pink drop zone check is commented out.)
  *
  * Checks 1-3 are skipped (bot drives straight if it sees no line) for START_HOLD_MS
  * at power on and INVERT_HOLD_MS after a colour flip, so the start and the edges of
  * the colour blind block can't look like a junction or a dead end.
  */
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "sra_board.h"
 #include "config.h"
 #include "maze.h"
 #include "motion.h"
 #include "pid.h"
 #include "junction.h"
-#include "drop_zone.h"
+// #include "drop_zone.h"     // pink zone off
+#include "turn_90.h"
+#include "turn_120.h"
 #include "display.h"
 
 static const char *TAG = "maze";
@@ -28,19 +33,18 @@ void handle_follow(maze_ctx_t *ctx)
 {
     const lsa_state_t *lsa = &ctx->lsa;
 
-    // 0. Pink: once confirmed go to DROP. While not sure yet, drive straight so the
-    //    line-lost check can't U-turn us before the confirm count is reached.
-    drop_check_t pink = drop_zone_check(ctx);
-    if (pink == DROP_CONFIRMED)
-    {
-        start_drop(ctx);
-        return;
-    }
-    if (pink == DROP_MAYBE)
-    {
-        drive(BASE_DUTY, BASE_DUTY);
-        return;
-    }
+    // Pink drop zone: off for now
+    // drop_check_t pink = drop_zone_check(ctx);
+    // if (pink == DROP_CONFIRMED)
+    // {
+    //     start_drop(ctx);
+    //     return;
+    // }
+    // if (pink == DROP_MAYBE)
+    // {
+    //     drive(BASE_DUTY, BASE_DUTY);
+    //     return;
+    // }
 
     // Start: motors off until the bar has been on a line for START_ON_LINE_MS, so the bot
     // doesn't drive / spin while it is in your hand or being put down
@@ -65,8 +69,25 @@ void handle_follow(maze_ctx_t *ctx)
         ctx->line_seen_since_ms = 0;
         ctx->seen_line = true;
         ctx->hold_until_ms = 0;
-        ctx->kick_until_ms = now_ms() + KICK_MS;
+        ctx->leaving_start = true;
         pid_reset();
+        // Break free from standing still: both wheels hard forward for a moment (at the
+        // follow speeds one wheel could sit still until the bot was nudged)
+        drive(START_PUSH_DUTY, START_PUSH_DUTY);
+        vTaskDelay(START_PUSH_MS / portTICK_PERIOD_MS);
+        ctx->kick_until_ms = now_ms() + KICK_MS;
+    }
+
+    // Started on a white patch (start zone): all five sensors white is not a junction or
+    // the end zone here, just drive straight out of it until the bar sees a normal line
+    if (ctx->leaving_start)
+    {
+        if (lsa->count == LSA_COUNT)
+        {
+            drive(KICK_DUTY, KICK_DUTY);
+            return;
+        }
+        ctx->leaving_start = false;
     }
     bool hold = now_ms() < ctx->hold_until_ms;
 
@@ -76,7 +97,6 @@ void handle_follow(maze_ctx_t *ctx)
         // looking for the next turn. Stops the bot from re-triggering on the corner it just
         // turned at (the cause of turning back and forth at the same spot).
         int branches = detect_branches(lsa, line_width_typical(&ctx->line_width));
-        int sharp = detect_sharp(lsa);
         int side_line = detect_side_line(lsa);
         line_width_update(&ctx->line_width, lsa);
         // Side IR (left of the bar) over a line while the LSA still has the main line:
@@ -92,10 +112,9 @@ void handle_follow(maze_ctx_t *ctx)
         if (ctx->rearm_count > 0)
         {
             // The IR is left out of "plain" so a badly set pot can't block re-arming for ever
-            bool plain = branches == 0 && sharp == 0 && lsa->count > 0;
+            bool plain = branches == 0 && lsa->count > 0;
             ctx->rearm_count = plain ? ctx->rearm_count - 1 : REARM_LOOPS;
             branches = 0;
-            sharp = 0;
             side_line = 0;  // the line we just turned off can still be beside the new one
         }
         // The IR has its own, much shorter wait after a turn: it can't see the line we turned
@@ -106,9 +125,10 @@ void handle_follow(maze_ctx_t *ctx)
         }
 
         // A separate second line beside the main one: remember when, for the acute exit check
-        if (side_line & BRANCH_LEFT)
+        // (or a confirmed-width branch on that side: the arm can merge with the main line)
+        if ((side_line & BRANCH_LEFT) || (branches & BRANCH_LEFT))
             ctx->side_left_ms = now_ms();
-        if (side_line & BRANCH_RIGHT)
+        if ((side_line & BRANCH_RIGHT) || (branches & BRANCH_RIGHT))
             ctx->side_right_ms = now_ms();
 
         // 1. Side branch held for CORNER_CONFIRM loops in a row: drive onto the junction.
@@ -148,14 +168,6 @@ void handle_follow(maze_ctx_t *ctx)
             return;
         }
 
-        // 2. Line has slid out to an outer sensor: 45 degree turn
-        if (confirm(sharp, &ctx->sharp_dir, &ctx->sharp_count) >= SHARP_CONFIRM)
-        {
-            int dir = ctx->sharp_dir;
-            ctx->sharp_dir = ctx->sharp_count = 0;
-            start_turn(ctx, TURN_SHARP, dir);
-            return;
-        }
     }
 
     // 3. No line at all: dead end or overshoot, decided by where the line was last seen
@@ -189,13 +201,15 @@ void handle_follow(maze_ctx_t *ctx)
         bool recent_right = ctx->side_right_ms && t - ctx->side_right_ms < ACUTE_WINDOW_MS;
         if ((recent_left || recent_right) && ctx->lost_count >= LOST_CONFIRM)
         {
-            int dir = recent_left ? -1 : 1;
+            // Both sides seen: the one seen last is where the arm is
+            int dir = !recent_right ? -1 : !recent_left ? 1
+                      : (ctx->side_left_ms >= ctx->side_right_ms ? -1 : 1);
             ESP_LOGI(TAG, "line ended %lu ms after a line was seen on the %s: acute %s",
                      (unsigned long)(t - (dir < 0 ? ctx->side_left_ms : ctx->side_right_ms)),
                      dir < 0 ? "left" : "right", dir < 0 ? "left" : "right");
             ctx->lost_count = 0;
             ctx->side_left_ms = ctx->side_right_ms = 0;
-            start_turn(ctx, TURN_SHARP, dir);
+            start_turn_120(ctx, dir);
             return;
         }
 
@@ -210,16 +224,17 @@ void handle_follow(maze_ctx_t *ctx)
                 ctx->lost_count = 0;
                 ctx->lost_since_ms = 0;
                 ESP_LOGI(TAG, "dead end");
-                start_turn(ctx, TURN_UTURN, UTURN_DIR);
+                start_uturn(ctx);
             }
         }
         else if (ctx->lost_count >= LOST_CONFIRM)
         {
-            // Line slipped off one side, or only just reached the middle (a missed turn):
-            // search toward the side it was last on
+            // Line slipped off one side, or only just reached the middle (a missed turn)
             ctx->lost_count = 0;
             ctx->lost_since_ms = 0;
-            start_search(ctx, pid_last_error() >= 0 ? 1 : -1);
+            // A corner the junction check missed (00111 -> 00000): pivot toward it right away
+            // as a 90 degree turn, not the slow search sweep (it turned late)
+            start_turn_90(ctx, pid_last_error() >= 0 ? 1 : -1);
         }
         // else brief gap: keep the last motor output going
         return;

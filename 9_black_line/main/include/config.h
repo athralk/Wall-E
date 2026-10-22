@@ -9,58 +9,63 @@
 #define LOOP_MS 10              // pause at the end of every loop
 
 /*
- * Edge following. The bot rides the LEFT edge of the white line:
- * black under A0 A1, white from A2 on (00111). EDGE_TARGET is that first white sensor.
+ * Which part of the line to follow:
+ *   0     the CENTRE of the line the whole run (normal line following)
+ *   > 0   the centre for this long after the start, then the LEFT EDGE (black on the left,
+ *         white from A2 on: 00111), where left branches can't be confused with wobble
  */
-#define EDGE_TARGET 2
-#define EDGE_SCALE 2.5f         // PID error per sensor the edge is off (same -5..+5 range as before)
-#define EDGE_MIN_CONTRAST 200   // brightest - darkest reading needed to trust the smooth edge position
-#define BASE_DUTY 30            // straight speed
-#define MIN_DUTY 20             // slowest wheel while steering
-#define MAX_DUTY 38             // fastest wheel while steering
+#define EDGE_AFTER_MS 0
+#define EDGE_TARGET 2           // edge mode: A2 is the first white sensor
+#define EDGE_SCALE 2.5f         // PID error per sensor the line is off (-5..+5, like before)
+#define EDGE_MIN_CONTRAST 200   // brightest - darkest reading needed to trust the smooth position
 
 /*
- * Pulling away after a stop (start, after every turn): a bit more push for a moment,
- * so the wheels don't sit still at BASE_DUTY
+ * Line following speeds
  */
-#define KICK_DUTY 38
-#define KICK_MIN_DUTY 30
+#define BASE_DUTY 38            // straight speed
+#define MIN_DUTY 28             // slowest wheel while steering
+#define MAX_DUTY 48             // fastest wheel while steering
+#define KICK_DUTY 44            // start of the run: a bit more push for a moment
+#define KICK_MIN_DUTY 36
 #define KICK_MS 120
 #define START_ON_LINE_MS 500    // motors stay off until the bar has sat on a line this long
 
 /*
- * Left branch: white under A0 and A1, which are always on black while following
+ * Corners. Centre mode: the line ran off to one side (the last outer sensor that saw it)
+ * and then vanished -> turn that way. Both sides at once (T) -> left. Neither (dead end) ->
+ * keep turning right round the end of the line (U-turn).
+ */
+#define SIDE_MEMORY_MS 400      // an outer sensor seeing the line counts for this long
+#define SIDE_SAME_MS 50         // both outer sensors within this of each other = a T, go left
+#define LOST_CONFIRM 2          // loops with no line before turning (rides out one bad reading)
+#define CREEP_MS 80             // roll on this long first, so the wheels reach the corner
+#define CREEP_DUTY 40
+#define RIGHT_90_MS 650         // 90 degrees of turning, until a turn has been timed
+#define RIGHT_CHECK_PCT 120     // right turn with no line by this % of 90 degrees = dead end
+
+/*
+ * Edge mode only: left branch = white under A0 and A1 (always black on the edge)
  */
 #define LEFT_CONFIRM 2          // loops in a row before it counts
-#define APPROACH_DUTY 38        // then drive straight so the wheels reach the junction
+#define APPROACH_DUTY 40        // then drive straight so the wheels reach the junction
 #define APPROACH_MS 150         // depends on the sensor bar to axle distance
-                                // (only once the bot has found the edge again after a turn)
 
 /*
- * Line lost (00111 -> 00000: right corner, dead end, or drifted left): pivot right in place.
- * Edge back within ~90 degrees = right turn. Not by then = dead end: keep turning right,
- * round the end of the line and onto its other side (the U-turn).
+ * Turns in place. No stop before or after: the bot turns straight out of following and
+ * goes straight back into it, easing off as the new line gets close.
  */
-#define LOST_CONFIRM 2          // loops of 00000 before turning (rides out one bad reading)
-#define RIGHT_90_MS 650         // 90 degrees of turning, until a left turn has been timed
-#define RIGHT_CHECK_PCT 120     // look for the right turn this % of a 90 degree turn
-
-/*
- * Turns in place
- */
-#define TURN_KICK_DUTY 50       // start of every turn, to get the wheels going
+#define TURN_KICK_DUTY 50       // first part of every turn, gets the inner wheel reversing
 #define TURN_KICK_MS 60
-#define TURN_DUTY 45            // main turn speed. Below 45 the wheels can stall
-#define TURN_SLOW_DUTY 40       // once the new line is close, ease onto it
-#define TURN_STOP_EARLY 1       // stop this many sensors before the edge: momentum and the
-                                // brake carry it the rest (0 = stop exactly on the edge)
-#define TURN_TIMEOUT_MS 3000    // found nothing in this long: stop and wait to be put back
-#define BRAKE_DUTY 45           // short reverse pulse at the end of a turn, kills overshoot
-#define BRAKE_MS 30
+#define TURN_DUTY 48            // main turn speed
+#define TURN_SLOW_DUTY 45       // once the new line is close. Below 45 the wheels can stall
+#define TURN_STOP_EARLY 1       // hand over to the PID this many sensors before the line is
+                                // centred: momentum carries it the rest (0 = right on it)
+#define BRAKE_MS 0              // reverse pulse at the end of a turn (0 = none, smoothest)
+#define BRAKE_DUTY 45
+#define TURN_TIMEOUT_MS 2500    // nothing found: try the other way once, then stop and wait
 
 /*
- * All white (wide junction, landed on the line after a turn): the PID steers left onto the
- * edge by itself. Still all white after this long: the end zone, stop.
+ * All white for this long: the end zone, stop
  */
 #define END_WHITE_MS 1500
 

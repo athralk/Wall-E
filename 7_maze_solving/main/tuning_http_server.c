@@ -1,4 +1,6 @@
 #include "tuning_http_server.h"
+#include "line_sensor.h"
+#include "maze.h"
 
 static const char *TAG = "tuning_http_server";
 static char scratch[SCRATCH_BUFSIZE];
@@ -171,6 +173,24 @@ static esp_err_t tuning_pid_post_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+/*
+ * GET /api/v1/lsa: the latest sensor bar reading as JSON, for frontend/lsa.html
+ * {"r":[5 readings 0-1000],"on":[5 x 0/1],"pos":line position,"state":"FOLLOW"}
+ */
+static esp_err_t lsa_get_handler(httpd_req_t *req)
+{
+    lsa_state_t l = line_sensor_latest();
+    char json[160];
+    snprintf(json, sizeof(json),
+             "{\"r\":[%d,%d,%d,%d,%d],\"on\":[%d,%d,%d,%d,%d],\"pos\":%.2f,\"state\":\"%s\"}",
+             l.reading[0], l.reading[1], l.reading[2], l.reading[3], l.reading[4],
+             l.on_line[0], l.on_line[1], l.on_line[2], l.on_line[3], l.on_line[4],
+             l.position, maze_state_text());
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    return httpd_resp_sendstr(req, json);
+}
+
 static esp_err_t start_tuning_http_server_private()
 {
     httpd_handle_t server = NULL;
@@ -193,6 +213,19 @@ static esp_err_t start_tuning_http_server_private()
     if (httpd_register_uri_handler(server, &tuning_pid_post_uri) != ESP_OK)
     {
         ESP_LOGE(TAG, "register post uri failed");
+        return ESP_FAIL;
+    }
+
+    // Before the "/*" file handler, which would otherwise catch this URL
+    httpd_uri_t lsa_get_uri = {
+        .uri = "/api/v1/lsa",
+        .method = HTTP_GET,
+        .handler = lsa_get_handler,
+        .user_ctx = NULL
+    };
+    if (httpd_register_uri_handler(server, &lsa_get_uri) != ESP_OK)
+    {
+        ESP_LOGE(TAG, "register lsa uri failed");
         return ESP_FAIL;
     }
 

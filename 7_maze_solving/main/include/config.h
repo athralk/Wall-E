@@ -1,4 +1,4 @@
-#ifndef CONFIG_H
+﻿#ifndef CONFIG_H
 #define CONFIG_H
 
 /*
@@ -9,15 +9,17 @@
  * Times are in milliseconds, "loops" are runs of the control loop (LOOP_MS each).
  */
 
-#define LOOP_MS 10              // control loop period
+#define LOOP_MS 10              // control loop period. Not below 10: the system tick is 10 ms, a
+                                // shorter pause rounds to 0 and the loop never lets CPU 0 rest
+                                // (task watchdog, Wi-Fi and the OLED starved)
 #define PID_REAL_DT 0           // 1 = PID derivative uses the measured loop time (micromouse style), 0 = per loop as before
 
 /*
  * Line following speeds (FOLLOW state)
  */
-#define BASE_DUTY 30
-#define MIN_DUTY 25             // slowest a wheel goes while steering, below ~25 it stalls
-#define MAX_DUTY 40             // fastest a wheel goes while following (steering). Turns have their own speeds
+#define BASE_DUTY 28
+#define MIN_DUTY 25             // slowest a wheel goes while steering (25 and below can stall)
+#define MAX_DUTY 38             // fastest a wheel goes while following (steering). Turns have their own speeds
 
 #define NODE_MEMORY 0           // 1 = straight first remembers nodes and comes back to untried exits.
                                 // 0 = plain rule: straight first, after a U-turn the turn first
@@ -33,7 +35,7 @@
  * 90 degree corners: line suddenly covers one side of the bar (11100 / 00111).
  * Drive forward until the axle is over the corner, then pivot in place onto the new line.
  */
-#define CORNER_CONFIRM 3        // loops in a row a side branch must be seen before we treat it as a corner / node.
+#define CORNER_CONFIRM 2        // loops in a row a side branch must be seen before we treat it as a corner / node.
                                 // Each side must also have been seen this many loops to count as an exit
 #define LINE_WIDTH_HISTORY 64   // plain readings remembered to learn the line width (the widest of them is used)
 #define LINE_WIDTH_MIN_SAMPLES 8 // fewer than this (start, colour flip): assume the widest plain line (3)
@@ -51,26 +53,24 @@
 // between two loops (the IR spot is small) is still caught
 #define IR_REARM_MS 120         // after a turn the IR is ignored only this long (the LSA waits REARM_LOOPS
                                 // plain readings, which can be much longer and used to hide real branches)
-#define APPROACH_DUTY 47        // straight drive to bring the axle over the corner. Too low and the bot stalls on the junction
-#define APPROACH_MS 150         // depends on sensor bar to axle distance, tune on track
-#define TURN_DUTY 44            // speed for every turn in place, after the start kick. Lower = less overshoot
-#define TURN_KICK_DUTY 50       // every turn starts at this (max motion.c allows) to break static friction,
-#define TURN_KICK_MS 80         // for this long, then drops to TURN_DUTY. Raise TURN_DUTY if turns stall half way
-#define TURN_SLOW_DUTY 40       // once a sensor on the turn side sees the new line, finish the turn at this
+#define APPROACH_DUTY 40        // straight drive to bring the axle over the corner
+#define APPROACH_MS 130         // depends on sensor bar to axle distance, tune on track
+#define TURN_DUTY 50            // steady pivot speed for every turn (50 = the max motion.c allows)
+// #define TURN_KICK_DUTY 50       // every turn starts at this (max motion.c allows) to break static friction,   (not used: turns run at a steady TURN_DUTY)
+// #define TURN_KICK_MS 80         // for this long, then drops to TURN_DUTY. Raise TURN_DUTY if turns stall half way   (not used: turns run at a steady TURN_DUTY)
+// #define TURN_SLOW_DUTY 45       // once a sensor on the turn side sees the new line, finish the turn at this   (not used: turns run at a steady TURN_DUTY)
+                                // (was 40: below 45 the wheels stall mid turn)
                                 // speed so it eases onto the line instead of slamming past it
 #define PIVOT_MIN_MS 40         // ignore the line for this long after starting a pivot
 #define PIVOT_TIMEOUT_MS 1500   // give up and search if the new line never shows
-#define BRAKE_DUTY 45           // short reverse pulse to kill pivot overshoot
-#define BRAKE_MS 30
-#define REARM_LOOPS 8           // plain line readings needed after a turn before the next turn can trigger
+#define BRAKE_DUTY 40           // short reverse pulse at the end of a turn, kills overshoot
+#define BRAKE_MS 40
+#define REARM_LOOPS 5           // plain line readings needed after a turn before the next turn can trigger
 #define END_CONFIRM_MS 200      // end zone: bar must stay all white this much longer (still driving) before stopping
 
 /*
- * 45 degree turns: the line slides out to the outermost sensor faster than PID can follow
- * (10000 / 00001). Pivot in place toward it (like a 90 degree turn) until the centre finds it.
+ * 45 degree bends and curves: no turn state, the PID line following steers round them
  */
-#define SHARP_CONFIRM 3
-#define SHARP_TIMEOUT_MS 2500    // long enough for a half turn: the acute exit check can end up turning that far
 
 /*
  * Acute (~120 degree) exits: the exit arm runs back under the outer sensor on its side (A0 / A4)
@@ -78,15 +78,15 @@
  * soon after that: pivot to that side (left first) instead of U-turning / searching.
  */
 #define ACUTE_WINDOW_MS 400
+#define ACUTE_TIMEOUT_MS 2500   // turn_120: no line in this long -> SEARCH
 
 /*
- * Every turn ends stopped, and BASE_DUTY isn't always enough to get the wheels going from a
- * standstill (the bot sat still after some turns). For KICK_MS after a turn / the start,
- * FOLLOW uses KICK_DUTY as the base and keeps both wheels at KICK_MIN_DUTY or more.
+ * After a turn / at the start, for KICK_MS FOLLOW uses KICK_DUTY as the base and keeps both
+ * wheels at KICK_MIN_DUTY or more, so the wheels never drop to a speed where they stall
  */
-#define KICK_DUTY 42
-#define KICK_MIN_DUTY 32
-#define KICK_MS 150
+#define KICK_DUTY 45
+#define KICK_MIN_DUTY 38
+#define KICK_MS 250
 
 /*
  * Which exit to take at a node (junction with 2+ exits):
@@ -128,12 +128,14 @@
 /*
  * Lost line recovery (gaps, acute turns sharper than 90)
  */
-#define LOST_CONFIRM 4          // loops with no line before we start searching
-#define DEADEND_MS 150          // line gone this long (driving straight) before a dead end U-turn
-#define CENTRED_CONFIRM 4       // dead end only if the line sat in the middle this many readings
+#define LOST_CONFIRM 3          // loops with no line before turning toward where it went
+#define DEADEND_MS 100          // line gone this long (driving straight) before a dead end U-turn
+#define CENTRED_CONFIRM 3       // dead end only if the line sat in the middle this many readings
                                 // in a row before it vanished (else it was a missed turn: search)
 #define START_HOLD_MS 1000      // (start now waits for the line, see START_ON_LINE_MS)
 #define START_ON_LINE_MS 500    // at power on / resume: motors stay off until the bar has seen a line this long
+#define START_PUSH_DUTY 50      // then both wheels this hard...
+#define START_PUSH_MS 120       // ...for this long, to break free from standing still
 #define SEARCH_DUTY 45          // pivots need more power than driving: below ~40 the bot may not move
 #define SEARCH_TIMEOUT_MS 800   // flip search direction after this, doubles each flip
 #define SEARCH_UTURN_MS 700     // a search that spun this long one way found the line behind: counts as

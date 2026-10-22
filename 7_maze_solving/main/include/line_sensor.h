@@ -57,4 +57,9 @@ void line_sensor_set_inverted(bool inverted);
 
 bool line_sensor_is_inverted(void);
 
+/*
+ * Copy of the latest reading, for the live LSA web page (any task may call it)
+ */
+lsa_state_t line_sensor_latest(void);
+
 #endif

@@ -5,15 +5,16 @@
  * Shared pieces of the maze state machine: the list of states, the context
  * struct every state handler works on, and the handler prototypes.
  *
- *   FOLLOW    state_follow.c    PID line following, spots everything else
+ *   FOLLOW    state_follow.c    PID line following (smooth curves, 45 degree bends), spots
+ *                               junctions, acute exits and dead ends
  *   APPROACH  state_junction.c  drive onto a junction, pick an exit
- *   TURN      state_turns.c     every turn in place: 90 degree, 45 degree, acute, U-turn
+ *   TURN_90   turn_90.c         90 degree pivot onto a junction exit / corner, or U-turn
+ *   TURN_120  turn_120.c        pivot onto an acute (~120 degree) exit
  *   SEARCH    state_turns.c     sweep to find a lost line
- *   DROP      drop_zone.c       pink zone: stop, back off, then U-turn
  *   DONE      state_turns.c     end zone, stopped (resumes if put back on a line)
  *
- * The colour blind section has no state of its own: colour_blind.c flips the
- * sensor polarity and FOLLOW keeps going as normal.
+ * Pink drop zone (drop_zone.c) and colour blind (colour_blind.c) are switched off for now,
+ * their calls are commented out.
  */
 
 #include <stdbool.h>
@@ -22,27 +23,26 @@
 #include "junction.h"
 
 /*
- * Values are what the 4 bar graph LEDs show for each state
+ * State ids (also printed in the log on every state change)
  */
 typedef enum
 {
     STATE_FOLLOW = 0x1,
     STATE_APPROACH = 0x2,
-    STATE_TURN = 0x4,
+    STATE_TURN_90 = 0x4,
+    STATE_TURN_120 = 0x6,
     STATE_SEARCH = 0x8,
-    STATE_DROP = 0x9,
+    STATE_DROP = 0x9,           // pink zone, switched off
     STATE_DONE = 0xF,
 } maze_state_t;
 
 /*
- * What a TURN is for. All of them pivot in place until the centre sensor lands on a
- * line, they only differ in how long the line is ignored at the start and the timeout.
+ * What a TURN_90 is for
  */
 typedef enum
 {
-    TURN_PIVOT,     // 90 degree exit at a junction
-    TURN_SHARP,     // 45 degree bend, or an acute exit found by the side IR
-    TURN_UTURN,     // dead end / after the drop zone, sets after_uturn
+    TURN_PIVOT,     // 90 degree exit at a junction or corner
+    TURN_UTURN,     // dead end, sets after_uturn
 } turn_kind_t;
 
 typedef struct
@@ -55,7 +55,7 @@ typedef struct
     int node_confirm;               // side branches: loops in a row with a branch under the bar
     int hits_left, hits_right;      // loops each side was seen as a branch at this junction (FOLLOW + APPROACH)
     line_width_t line_width;        // normal width of the line, learned while following
-    int sharp_dir, sharp_count;     // confirm() counters for 45 degree turns
+    int sharp_dir, sharp_count;     // only used by colour_blind.c (off)
     int lost_count;                 // loops in a row with no line under the bar
     int centred_count;              // readings in a row with the line in the middle of the bar
     uint32_t lost_since_ms;         // when the line vanished (0 = it hasn't)
@@ -63,6 +63,7 @@ typedef struct
     uint32_t hold_until_ms;         // start / colour flip: skip junction / sharp / dead end checks until then
     int rearm_count;                // after a junction / turn: plain line readings still needed
                                     // before the next turn can be detected (REARM_LOOPS)
+    bool leaving_start;             // just started on a white patch: drive straight out of it
     bool seen_line;                 // line found since power on / resume (ends the start hold)
     uint32_t kick_until_ms;         // after a stop: drive harder until then so the wheels get going
     uint32_t turn_end_ms;           // when the last turn / approach handed back to FOLLOW (IR re-arm)
@@ -94,30 +95,37 @@ typedef struct
 uint32_t now_ms(void);
 
 /*
+ * Name of the current state, for the live LSA web page
+ */
+const char *maze_state_text(void);
+
+/*
  * Time spent in the current state
  */
 uint32_t state_elapsed(const maze_ctx_t *ctx);
 
 /*
- * Switches state: logs it, restarts the state timer and updates the bar graph
+ * Switches state: logs it and restarts the state timer
  */
 void set_state(maze_ctx_t *ctx, maze_state_t next);
 
 /*
  * Starting a state: sets it and the motors in one go (state_turns.c)
  */
-void start_turn(maze_ctx_t *ctx, turn_kind_t kind, int dir);
 void start_search(maze_ctx_t *ctx, int dir);
 void back_to_follow(maze_ctx_t *ctx);
+
+/*
+ * Shared by turn_90.c and turn_120.c (state_turns.c)
+ */
+void finish_turn(maze_ctx_t *ctx);
 
 /*
  * One handler per state, called every loop while in that state
  */
 void handle_follow(maze_ctx_t *ctx);
 void handle_approach(maze_ctx_t *ctx);
-void handle_turn(maze_ctx_t *ctx);
 void handle_search(maze_ctx_t *ctx);
-void handle_drop(maze_ctx_t *ctx);
 void handle_done(maze_ctx_t *ctx);
 
 #endif

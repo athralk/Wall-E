@@ -15,7 +15,8 @@
 #include "motion.h"
 #include "pid.h"
 #include "junction.h"
-#include "drop_zone.h"
+// #include "drop_zone.h"     // pink zone off
+#include "turn_90.h"
 #include "node_memory.h"
 
 static const char *TAG = "maze";
@@ -25,11 +26,12 @@ void handle_approach(maze_ctx_t *ctx)
     const lsa_state_t *lsa = &ctx->lsa;
 
     // The pink square can look like a wide patch too, it wins over the end zone
-    if (drop_zone_check(ctx) == DROP_CONFIRMED)
-    {
-        start_drop(ctx);
-        return;
-    }
+    // Pink drop zone: off for now
+    // if (drop_zone_check(ctx) == DROP_CONFIRMED)
+    // {
+    //     start_drop(ctx);
+    //     return;
+    // }
 
     // A cross can show 11110 first and 11111 a moment later, so keep counting each side.
     // The bot drives straight here (no PID), so the line under the bar doesn't wobble.
@@ -129,6 +131,6 @@ void handle_approach(maze_ctx_t *ctx)
     }
     else
     {
-        start_turn(ctx, TURN_PIVOT, choice == EXIT_LEFT ? -1 : 1);
+        start_turn_90(ctx, choice == EXIT_LEFT ? -1 : 1);
     }
 }
