@@ -1,86 +1,38 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Live LSA</title>
 <style>
-	* { margin: 0; padding: 0; box-sizing: border-box; font-family: "Segoe UI", Tahoma, sans-serif; }
-	body { background: #1a202c; color: #e2e8f0; min-height: 100vh; display: flex;
-		justify-content: center; align-items: center; padding: 16px; }
-	main { width: 100%; max-width: 560px; }
-	h1 { font-size: 1.4em; margin-bottom: 4px; }
-	.sub { color: #a0aec0; font-size: 0.9em; margin-bottom: 20px; }
-	.bars { display: flex; gap: 10px; align-items: flex-end; height: 220px; }
-	.col { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; }
-	.track { flex: 1; width: 100%; background: #2d3748; border-radius: 6px; position: relative;
-		overflow: hidden; }
-	.fill { position: absolute; bottom: 0; width: 100%; background: #4a5568; transition: height 0.1s; }
-	.col.on .fill { background: #f7fafc; }
-	.val { margin-top: 6px; font-variant-numeric: tabular-nums; font-size: 1.05em; }
-	.name { color: #a0aec0; font-size: 0.8em; }
-	.thr { position: absolute; left: 0; right: 0; border-top: 2px dashed #f6ad55; }
-	.info { display: flex; justify-content: space-between; margin-top: 20px; gap: 10px;
-		flex-wrap: wrap; font-size: 1.05em; }
-	.info b { font-variant-numeric: tabular-nums; }
-	.pattern { font-family: Consolas, monospace; letter-spacing: 4px; font-size: 1.3em; }
-	.stale { color: #fc8181; }
-	a { color: #90cdf4; }
-</style>
-</head>
+body{background:#111;color:#eee;font:16px monospace;margin:16px}
+.r{display:flex;align-items:center;gap:8px;margin:4px 0}
+.n{width:60px}.v{width:48px;text-align:right}
+.b{height:22px;background:#555}.b.on{background:#fff}
+#t{font-size:22px;margin-top:12px}#s{color:#888}
+</style></head>
 <body>
-<main>
-	<h1>Live LSA</h1>
-	<p class="sub">Left (U5) to right (U1). White fills a bar, dashed line = white threshold 820.
-		<a href="/">PID tuning</a></p>
-	<div class="bars" id="bars"></div>
-	<div class="info">
-		<span>Pattern <b class="pattern" id="pattern">-----</b></span>
-		<span>Position <b id="pos">-</b></span>
-		<span>State <b id="state">-</b></span>
-	</div>
-	<p class="sub" id="status" style="margin-top:16px">connecting...</p>
-</main>
+<div id="bars"></div>
+<div id="t">-----</div>
+<div id="s">connecting</div>
 <script>
-	const THRESHOLD = 820;
-	const names = ["A0 / U5", "A1 / U4", "A2 / U3", "A3 / U2", "A4 / U1"];
-	const bars = document.getElementById("bars");
-	const cols = names.map((n) => {
-		const col = document.createElement("div");
-		col.className = "col";
-		col.innerHTML = '<div class="track"><div class="fill"></div>' +
-			'<div class="thr" style="bottom:' + THRESHOLD / 10 + '%"></div></div>' +
-			'<div class="val">-</div><div class="name">' + n + "</div>";
-		bars.appendChild(col);
-		return col;
-	});
-	const status = document.getElementById("status");
-	let lastOk = 0;
-
-	async function poll() {
-		try {
-			const res = await fetch("/api/v1/lsa", { cache: "no-store" });
-			const d = await res.json();
-			d.r.forEach((v, i) => {
-				cols[i].querySelector(".fill").style.height = Math.max(0, Math.min(100, v / 10)) + "%";
-				cols[i].querySelector(".val").textContent = v;
-				cols[i].classList.toggle("on", d.on[i] === 1);
-			});
-			document.getElementById("pattern").textContent = d.on.join("");
-			document.getElementById("pos").textContent = d.pos.toFixed(2);
-			document.getElementById("state").textContent = d.state;
-			lastOk = Date.now();
-			status.textContent = "live";
-			status.classList.remove("stale");
-		} catch (e) {
-			if (Date.now() - lastOk > 1000) {
-				status.textContent = "no data from the bot";
-				status.classList.add("stale");
-			}
-		}
-		setTimeout(poll, 150);
-	}
-	poll();
+// Readings are pushed by the bot over a WebSocket (no request per update), left U5 .. right U1
+var names=["A0 U5","A1 U4","A2 U3","A3 U2","A4 U1"],bars=[],vals=[];
+var box=document.getElementById("bars"),t=document.getElementById("t"),s=document.getElementById("s");
+names.forEach(function(n){
+  var row=document.createElement("div");row.className="r";
+  row.innerHTML='<span class="n">'+n+'</span><span class="v">-</span><div class="b"></div>';
+  box.appendChild(row);vals.push(row.children[1]);bars.push(row.children[2]);
+});
+function go(){
+  var ws=new WebSocket("ws://"+location.host+"/ws"),n=0,t0=Date.now();
+  ws.onopen=function(){s.textContent="live"};
+  ws.onmessage=function(e){
+    var p=e.data.split(" ");
+    for(var i=0;i<5;i++){vals[i].textContent=p[i];bars[i].style.width=(p[i]/4)+"px";
+      bars[i].className=p[5][i]==="1"?"b on":"b";}
+    t.textContent=p[5]+"  pos "+p[6]+"  "+p[7];
+    n++;if(Date.now()-t0>1000){s.textContent="live, "+n+" readings/s";n=0;t0=Date.now();}
+  };
+  ws.onclose=function(){s.textContent="reconnecting";setTimeout(go,500)};
+}
+go();
 </script>
-</body>
-</html>
+</body></html>

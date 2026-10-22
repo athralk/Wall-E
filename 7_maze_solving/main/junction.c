@@ -59,7 +59,7 @@ int line_width_typical(const line_width_t *lw)
     return widest;
 }
 
-int detect_branches(const lsa_state_t *lsa, int typical_width)
+int detect_branches(const lsa_state_t *lsa, int typical_width, bool was_centred)
 {
     int first[LSA_COUNT], last[LSA_COUNT];
     if (find_blocks(lsa, first, last) != 1)
@@ -67,7 +67,11 @@ int detect_branches(const lsa_state_t *lsa, int typical_width)
 
     int width = last[0] - first[0] + 1;
     const int centre = LSA_COUNT / 2;
-    if (width < typical_width + 1 || first[0] > centre || last[0] < centre)
+    // Normally wider than the line. Just after a centred reading, the normal width is
+    // enough: a line sliding sideways can't go from centred to the outer sensor in one
+    // reading, a corner coming under the bar does (00100 / 01110 -> 00111)
+    int need = was_centred ? typical_width : typical_width + 1;
+    if (width < need || first[0] > centre || last[0] < centre)
         return 0;
 
     int branches = 0;

@@ -1,10 +1,18 @@
+#include <stdio.h>
+#include <stdlib.h>
 #include "tuning_http_server.h"
 #include "line_sensor.h"
 #include "maze.h"
 
 static const char *TAG = "tuning_http_server";
 static char scratch[SCRATCH_BUFSIZE];
-static pid_const_t pid_constants = {.kp = 0.9, .ki = 0, .kd = 6.5, .val_changed = true};
+// Starting gains. The error is how far the line is off centre, in sensors (-2..+2), so
+// Kp 5 = 5 duty of steering per sensor of offset
+static pid_const_t pid_constants = {.kp = 5, .ki = 0, .kd = 15, .val_changed = true};
+static httpd_handle_t server_handle = NULL;
+static volatile int ws_fd = -1;     // socket of the live LSA page (-1 = none open)
+
+#define LSA_PUSH_MS 40              // live LSA page: a reading every 40 ms (25 a second)
 
 static void initialise_mdns(void)
 {
@@ -191,6 +199,67 @@ static esp_err_t lsa_get_handler(httpd_req_t *req)
     return httpd_resp_sendstr(req, json);
 }
 
+/*
+ * /ws: the live LSA page (frontend/lsa.html) opens a WebSocket here and the bot pushes
+ * every reading to it (lsa_push_task), no request per update. The page sends nothing.
+ */
+static esp_err_t lsa_ws_handler(httpd_req_t *req)
+{
+    if (req->method == HTTP_GET)
+    {
+        ws_fd = httpd_req_to_sockfd(req);   // handshake done: this is the page to push to
+        ESP_LOGI(TAG, "live LSA page connected");
+        return ESP_OK;
+    }
+    // Read (and drop) anything the page sends, so the socket stays healthy
+    uint8_t buf[32];
+    httpd_ws_frame_t frame = {.type = HTTPD_WS_TYPE_TEXT, .payload = buf};
+    esp_err_t err = httpd_ws_recv_frame(req, &frame, 0);
+    if (err == ESP_OK && frame.len > 0 && frame.len < sizeof(buf))
+        err = httpd_ws_recv_frame(req, &frame, frame.len);
+    return err;
+}
+
+/*
+ * Runs in the server's own task (httpd_queue_work), where sending is safe
+ */
+static void ws_send_work(void *arg)
+{
+    char *msg = arg;
+    httpd_ws_frame_t frame = {.type = HTTPD_WS_TYPE_TEXT, .payload = (uint8_t *)msg, .len = strlen(msg)};
+    int fd = ws_fd;
+    if (fd >= 0 && httpd_ws_send_frame_async(server_handle, fd, &frame) != ESP_OK)
+        ws_fd = -1;     // page closed
+    free(msg);
+}
+
+/*
+ * One line per reading: "r0 r1 r2 r3 r4 pattern position state", left (U5) to right (U1)
+ */
+static void lsa_push_task(void *arg)
+{
+    while (true)
+    {
+        vTaskDelay(pdMS_TO_TICKS(LSA_PUSH_MS));
+        int fd = ws_fd;
+        if (fd < 0 || httpd_ws_get_fd_info(server_handle, fd) != HTTPD_WS_CLIENT_WEBSOCKET)
+        {
+            ws_fd = -1;
+            continue;
+        }
+        lsa_state_t l = line_sensor_latest();
+        char *msg = malloc(96);
+        if (msg == NULL)
+            continue;
+        snprintf(msg, 96, "%d %d %d %d %d %d%d%d%d%d %.2f %s",
+                 l.reading[0], l.reading[1], l.reading[2], l.reading[3], l.reading[4],
+                 l.on_line[0], l.on_line[1], l.on_line[2], l.on_line[3], l.on_line[4],
+                 l.position, maze_state_text());
+        if (httpd_queue_work(server_handle, ws_send_work, msg) != ESP_OK)
+            free(msg);
+    }
+}
+
 static esp_err_t start_tuning_http_server_private()
 {
     httpd_handle_t server = NULL;
@@ -216,7 +285,20 @@ static esp_err_t start_tuning_http_server_private()
         return ESP_FAIL;
     }
 
-    // Before the "/*" file handler, which would otherwise catch this URL
+    // Before the "/*" file handler, which would otherwise catch these URLs
+    httpd_uri_t lsa_ws_uri = {
+        .uri = "/ws",
+        .method = HTTP_GET,
+        .handler = lsa_ws_handler,
+        .user_ctx = NULL,
+        .is_websocket = true
+    };
+    if (httpd_register_uri_handler(server, &lsa_ws_uri) != ESP_OK)
+    {
+        ESP_LOGE(TAG, "register ws uri failed");
+        return ESP_FAIL;
+    }
+
     httpd_uri_t lsa_get_uri = {
         .uri = "/api/v1/lsa",
         .method = HTTP_GET,
@@ -241,6 +323,8 @@ static esp_err_t start_tuning_http_server_private()
         return ESP_FAIL;
     }
 
+    server_handle = server;
+    xTaskCreate(&lsa_push_task, "lsa_push", 3072, NULL, 1, NULL);
     return ESP_OK;
 }
 

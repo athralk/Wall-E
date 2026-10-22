@@ -17,6 +17,7 @@
 #define PID_DT_MAX_S 0.1f                   // longer gaps (after a turn / pause) count as one normal loop
 
 static float prev_error = 0, cumulative_error = 0;
+static float smooth_difference = 0;     // D after a light low pass
 static int64_t last_us = 0;
 
 float pid_compute(float error)
@@ -35,18 +36,19 @@ float pid_compute(float error)
     }
     float loops = dt / PID_DT_REF_S;
 
-    error = error * 10; // we need the error correction in range 0-100 so that we can send it directly as duty cycle parameter
     float difference = (error - prev_error) / loops;                            // D: how fast the error is changing, per loop
-    cumulative_error = bound(cumulative_error + error * loops, -30, 30);        // I: summed error, clamped so it can't wind up
+    cumulative_error = bound(cumulative_error + error * loops, -3, 3);        // I: summed error, clamped so it can't wind up
     prev_error = error;
+    smooth_difference += 0.5f * (difference - smooth_difference);
 
-    return k.kp * error + k.ki * cumulative_error + k.kd * difference;
+    return k.kp * error + k.ki * cumulative_error + k.kd * smooth_difference;
 }
 
 void pid_reset(void)
 {
     prev_error = 0;
     cumulative_error = 0;
+    smooth_difference = 0;
     last_us = 0;
 }
 

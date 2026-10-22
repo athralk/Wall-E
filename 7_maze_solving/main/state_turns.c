@@ -21,6 +21,7 @@ void back_to_follow(maze_ctx_t *ctx)
     ctx->kick_until_ms = now_ms() + KICK_MS;
     ctx->turn_end_ms = now_ms();
     ctx->last_centred = true;
+    ctx->line_side = 0;
     ctx->centred_count = 0;
     ctx->lost_count = 0;
     ctx->lost_since_ms = 0;

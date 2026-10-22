@@ -35,7 +35,7 @@ void handle_approach(maze_ctx_t *ctx)
 
     // A cross can show 11110 first and 11111 a moment later, so keep counting each side.
     // The bot drives straight here (no PID), so the line under the bar doesn't wobble.
-    int branches = detect_branches(lsa, line_width_typical(&ctx->line_width));
+    int branches = detect_branches(lsa, line_width_typical(&ctx->line_width), false);
     if (branches & BRANCH_LEFT)
         ctx->hits_left++;
     if (branches & BRANCH_RIGHT)

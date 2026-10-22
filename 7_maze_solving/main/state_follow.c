@@ -96,7 +96,7 @@ void handle_follow(maze_ctx_t *ctx)
         // After a junction / turn, wait for REARM_LOOPS plain line readings in a row before
         // looking for the next turn. Stops the bot from re-triggering on the corner it just
         // turned at (the cause of turning back and forth at the same spot).
-        int branches = detect_branches(lsa, line_width_typical(&ctx->line_width));
+        int branches = detect_branches(lsa, line_width_typical(&ctx->line_width), ctx->last_centred);
         int side_line = detect_side_line(lsa);
         line_width_update(&ctx->line_width, lsa);
         // Side IR (left of the bar) over a line while the LSA still has the main line:
@@ -232,9 +232,13 @@ void handle_follow(maze_ctx_t *ctx)
             // Line slipped off one side, or only just reached the middle (a missed turn)
             ctx->lost_count = 0;
             ctx->lost_since_ms = 0;
-            // A corner the junction check missed (00111 -> 00000): pivot toward it right away
-            // as a 90 degree turn, not the slow search sweep (it turned late)
-            start_turn_90(ctx, pid_last_error() >= 0 ? 1 : -1);
+            // A corner the junction check missed (00111 -> 00000): pivot toward the side the
+            // sensors last saw the line on. (Not the PID error: it is 0 after every turn and
+            // stale while a branch is being checked, which turned the bot the wrong way.)
+            int dir = ctx->line_side ? ctx->line_side : -1;
+            ESP_LOGI(TAG, "line lost, last seen on the %s", ctx->line_side > 0 ? "right"
+                     : ctx->line_side < 0 ? "left" : "middle (turning left)");
+            start_turn_90(ctx, dir);
         }
         // else brief gap: keep the last motor output going
         return;
@@ -248,12 +252,30 @@ void handle_follow(maze_ctx_t *ctx)
     // for a missed turn and the bot swept left and right instead of U-turning.
     ctx->last_centred = lsa->on_line[2] && !lsa->on_line[0] && !lsa->on_line[LSA_COUNT - 1];
     ctx->centred_count = ctx->last_centred ? ctx->centred_count + 1 : 0;
+    // Which side the line is on, from the sensors: kept until it is on the other side
+    if (lsa->position <= -0.5f || ((lsa->on_line[0] || lsa->on_line[1]) && !lsa->on_line[3] && !lsa->on_line[4]))
+        ctx->line_side = -1;
+    else if (lsa->position >= 0.5f || ((lsa->on_line[3] || lsa->on_line[4]) && !lsa->on_line[0] && !lsa->on_line[1]))
+        ctx->line_side = 1;
     // 4. Normal PID following: speed up one wheel and slow the other. Just after a stop
     //    (turn, start) use the kick speeds so neither wheel sits below what gets it moving.
     bool kick = now_ms() < ctx->kick_until_ms;
     int base = kick ? KICK_DUTY : BASE_DUTY;
     int low = kick ? KICK_MIN_DUTY : MIN_DUTY;
     float correction = pid_compute(lsa->position);
-    drive(bound(base + correction, low, MAX_DUTY),
-          bound(base - correction, low, MAX_DUTY));
+    // Line out at the edge of the bar (curve, 45 degree bend): steer harder toward it
+    if (lsa->position >= EDGE_BOOST_POS)
+        correction += EDGE_BOOST_DUTY;
+    else if (lsa->position <= -EDGE_BOOST_POS)
+        correction -= EDGE_BOOST_DUTY;
+    float left = base + correction, right = base - correction;
+    // Inner wheel would drop below the minimum (where it stalls): lift both wheels by the
+    // shortfall, so the bot still steers by the same difference but no wheel stops
+    float lift = low - (left < right ? left : right);
+    if (lift > 0)
+    {
+        left += lift;
+        right += lift;
+    }
+    drive(bound(left, low, MAX_DUTY), bound(right, low, MAX_DUTY));
 }

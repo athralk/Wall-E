@@ -59,6 +59,7 @@ typedef struct
     int lost_count;                 // loops in a row with no line under the bar
     int centred_count;              // readings in a row with the line in the middle of the bar
     uint32_t lost_since_ms;         // when the line vanished (0 = it hasn't)
+    int line_side;                  // where the line was last seen off centre: -1 left, +1 right, 0 not yet
     bool last_centred;              // line was in the middle of the bar the last time we saw it
     uint32_t hold_until_ms;         // start / colour flip: skip junction / sharp / dead end checks until then
     int rearm_count;                // after a junction / turn: plain line readings still needed

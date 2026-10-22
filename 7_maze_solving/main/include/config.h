@@ -17,9 +17,12 @@
 /*
  * Line following speeds (FOLLOW state)
  */
-#define BASE_DUTY 28
-#define MIN_DUTY 25             // slowest a wheel goes while steering (25 and below can stall)
-#define MAX_DUTY 38             // fastest a wheel goes while following (steering). Turns have their own speeds
+#define BASE_DUTY 28            // straight speed
+#define MIN_DUTY 20             // no wheel goes below this while following: when steering would
+                                // push the inner wheel lower, both wheels go up instead (no wheel stops)
+#define EDGE_BOOST_DUTY 12      // line out at the edge of the bar (|position| >= EDGE_BOOST_POS):
+#define EDGE_BOOST_POS 1.5f     // this much extra steering toward it, so curves / 45s get followed
+#define MAX_DUTY 36             // fastest a wheel goes while following (steering). Turns have their own speeds
 
 #define NODE_MEMORY 0           // 1 = straight first remembers nodes and comes back to untried exits.
                                 // 0 = plain rule: straight first, after a U-turn the turn first
@@ -28,7 +31,7 @@
  * Line centering (like wall centering on the micromouse): 1 = PID error from the analog
  * readings, smooth. 0 = old on / off sensor position, only a few steps.
  */
-#define ANALOG_CENTERING 0      // off for now: the known-good on / off position, try 1 once turns are reliable
+#define ANALOG_CENTERING 1      // smooth line position from the analog readings (no jumps between sensors)
 #define MIN_CONTRAST 150        // brightest - darkest sensor must differ this much to trust the analog position
 
 /*
@@ -84,8 +87,8 @@
  * After a turn / at the start, for KICK_MS FOLLOW uses KICK_DUTY as the base and keeps both
  * wheels at KICK_MIN_DUTY or more, so the wheels never drop to a speed where they stall
  */
-#define KICK_DUTY 45
-#define KICK_MIN_DUTY 38
+#define KICK_DUTY 36
+#define KICK_MIN_DUTY 30
 #define KICK_MS 250
 
 /*

@@ -17,11 +17,10 @@
 #define WHITE_BOUNDARY 820 // normalised readings above this are on the white line
 
 /*
- * Symmetric weights, scaled by POSITION_SCALE so position spans -5..+5
- * like the error range the original line_following example was tuned with
+ * Symmetric weights: position is in sensors, -2 (line under A0) .. +2 (under A4)
  */
 static const int weights[LSA_COUNT] = {-2, -1, 0, 1, 2};
-#define POSITION_SCALE 2.5f
+#define POSITION_SCALE 1.0f
 
 static adc_handle_t line_sensor;
 static lsa_state_t latest;      // last reading, for the live LSA web page

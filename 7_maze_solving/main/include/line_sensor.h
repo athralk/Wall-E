@@ -33,7 +33,7 @@ typedef struct
     bool on_line[LSA_COUNT];  // true when the sensor sees the (white) line
     uint8_t pattern;          // on_line packed as bits, see LSA_BIT
     int count;                // number of sensors on the line (0 = line lost, 5 = all white)
-    float position;           // -5 (line under left) .. +5 (line under right), only valid if count > 0
+    float position;           // -2 (line under left) .. +2 (line under right), in sensors, only valid if count > 0
     int raw_white_count;      // sensors seeing white, ignoring the inverted flag
     uint8_t raw_pattern;      // sensors seeing white as bits (like pattern), ignoring the inverted flag
     bool ir_left;             // side IR (left of the bar) sees the line: a left branch is passing under it

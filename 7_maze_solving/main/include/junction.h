@@ -51,8 +51,10 @@ int line_width_typical(const line_width_t *lw);
  * A line that only slid sideways keeps its width (01110 -> 11100 is 3 wide), so it can
  * never count, however far it slides. 11110 / 11111 from a 3 wide line, or 11100 from a
  * 1 wide line, are real branches. Two separate blocks are never a branch (see detect_side_line).
+ * was_centred: the previous reading had the line in the middle, then the normal width is
+ * enough (a corner coming under the bar, not a slide).
  */
-int detect_branches(const lsa_state_t *lsa, int typical_width);
+int detect_branches(const lsa_state_t *lsa, int typical_width, bool was_centred);
 
 /*
  * A second, separate line beside the main one (a gap between two lit blocks, e.g. 10110):
