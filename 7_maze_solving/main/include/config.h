@@ -165,7 +165,7 @@
 #define DROP_ZONE_ENABLED 0     // 0 until PINK_MIN / PINK_MAX are calibrated, guessed values can fire on black
 #define PINK_MIN 600            // normalised reading (0 black .. 1000 white), PLACEHOLDER
 #define PINK_MAX 800            // PLACEHOLDER
-#define PINK_CONFIRM 5          // loops the middle three sensors must stay in the band
+#define PINK_CONFIRM 3          // loops the middle three sensors must stay in the band
 #define DROP_STOP_MS 500        // stand still so the object settles in the zone
 #define DROP_REVERSE_DUTY 40
 #define DROP_REVERSE_MS 200     // back off the object before the U-turn

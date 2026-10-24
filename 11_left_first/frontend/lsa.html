@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Live LSA</title>
+<style>
+body{background:#111;color:#eee;font:16px monospace;margin:16px}
+.r{display:flex;align-items:center;gap:8px;margin:4px 0}
+.n{width:60px}.v{width:48px;text-align:right}
+.b{height:22px;background:#555}.b.on{background:#fff}
+#t{font-size:22px;margin-top:12px}#s{color:#888}
+</style></head>
+<body>
+<div id="bars"></div>
+<div id="t">-----</div>
+<div id="s">connecting</div>
+<script>
+// Readings are pushed by the bot over a WebSocket (no request per update), left U5 .. right U1
+var names=["A0 U5","A1 U4","A2 U3","A3 U2","A4 U1"],bars=[],vals=[];
+var box=document.getElementById("bars"),t=document.getElementById("t"),s=document.getElementById("s");
+names.forEach(function(n){
+  var row=document.createElement("div");row.className="r";
+  row.innerHTML='<span class="n">'+n+'</span><span class="v">-</span><div class="b"></div>';
+  box.appendChild(row);vals.push(row.children[1]);bars.push(row.children[2]);
+});
+function go(){
+  var ws=new WebSocket("ws://"+location.host+"/ws"),n=0,t0=Date.now();
+  ws.onopen=function(){s.textContent="live"};
+  ws.onmessage=function(e){
+    var p=e.data.split(" ");
+    for(var i=0;i<5;i++){vals[i].textContent=p[i];bars[i].style.width=(p[i]/4)+"px";
+      bars[i].className=p[5][i]==="1"?"b on":"b";}
+    t.textContent=p[5]+"  pos "+p[6]+"  "+p[7];
+    n++;if(Date.now()-t0>1000){s.textContent="live, "+n+" readings/s";n=0;t0=Date.now();}
+  };
+  ws.onclose=function(){s.textContent="reconnecting";setTimeout(go,500)};
+}
+go();
+</script>
+</body></html>
