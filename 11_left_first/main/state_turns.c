@@ -87,7 +87,9 @@ void handle_search(maze_ctx_t *ctx)
     const lsa_state_t *lsa = &ctx->lsa;
     if (lsa->on_line[1] || lsa->on_line[2] || lsa->on_line[3])
     {
-        stop();
+        // The search may have been turning for a while; don't brake to a full stop
+        // just as the line is reacquired. Give both wheels the follow kick instead.
+        drive(KICK_DUTY, KICK_DUTY);
         ctx->search_net_ms += ctx->turn_dir * (int32_t)state_elapsed(ctx);
         if (search_turned_around(ctx))
         {

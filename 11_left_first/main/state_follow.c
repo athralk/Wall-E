@@ -137,14 +137,6 @@ void handle_follow(maze_ctx_t *ctx)
             drive(APPROACH_DUTY, APPROACH_DUTY);
             return;
         }
-        if (ctx->node_confirm > 0)
-        {
-            // Maybe a branch: don't let the PID swing toward it while it is being confirmed,
-            // that swing is what used to make the bot lose its line at junctions
-            drive(BASE_DUTY, BASE_DUTY);
-            return;
-        }
-
     }
 
     // 3. No line at all: dead end or overshoot, decided by where the line was last seen

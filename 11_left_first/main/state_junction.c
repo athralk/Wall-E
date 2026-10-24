@@ -75,6 +75,14 @@ void handle_approach(maze_ctx_t *ctx)
     bool left = ctx->hits_left >= CORNER_CONFIRM;
     bool right = ctx->hits_right >= CORNER_CONFIRM;
     bool straight = lsa->on_line[1] || lsa->on_line[2] || lsa->on_line[3];
+    if (!left && !straight && !right && state_elapsed(ctx) < APPROACH_MS + APPROACH_RECHECK_MS)
+    {
+        // A single empty reading at a node can send the robot into a rotating search.
+        // Keep moving forward briefly so the next LSA samples can reveal the exits.
+        drive(APPROACH_DUTY, APPROACH_DUTY);
+        return;
+    }
+
     // One exit = just a corner, two or more = a node (counted)
     bool is_node = left + right + straight >= 2;
 
@@ -134,6 +142,7 @@ void handle_approach(maze_ctx_t *ctx)
     }
     else if (choice == EXIT_NONE)
     {
+        ESP_LOGW(TAG, "junction approach found no exit after resampling; searching");
         start_search(ctx, TURN_PREFERENCE);
     }
     else

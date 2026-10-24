@@ -17,12 +17,12 @@
 /*
  * Line following speeds (FOLLOW state)
  */
-#define BASE_DUTY 32            // straight speed
-#define MIN_DUTY 20             // no wheel goes below this while following: when steering would
+#define BASE_DUTY 37           // lower speed gives the LSA more time to track smooth curves
+#define MIN_DUTY 28             // no wheel goes below this while following: when steering would
                                 // push the inner wheel lower, both wheels go up instead (no wheel stops)
 #define EDGE_BOOST_DUTY 12      // line out at the edge of the bar (|position| >= EDGE_BOOST_POS):
 #define EDGE_BOOST_POS 1.5f     // this much extra steering toward it, so curves / 45s get followed
-#define MAX_DUTY 36             // fastest a wheel goes while following (steering). Turns have their own speeds
+#define MAX_DUTY 48            // fastest a wheel goes while following (steering). Turns have their own speeds
 
 #define NODE_MEMORY 0           // 1 = straight first remembers nodes and comes back to untried exits.
                                 // 0 = plain rule: straight first, after a U-turn the turn first
@@ -38,7 +38,7 @@
  * 90 degree corners: line suddenly covers one side of the bar (11100 / 00111).
  * Drive forward until the axle is over the corner, then pivot in place onto the new line.
  */
-#define CORNER_CONFIRM 4        // require a stable side branch for 40 ms before treating it as a corner / node.
+#define CORNER_CONFIRM 4        // require a stable side branch for 60 ms before treating it as a corner / node.
                                 // Each side must also have been seen this many loops to count as an exit
 #define LINE_WIDTH_HISTORY 64   // plain readings remembered to learn the line width (the widest of them is used)
 #define LINE_WIDTH_MIN_SAMPLES 8 // fewer than this (start, colour flip): assume the widest plain line (3)
@@ -54,8 +54,9 @@
 #define IR_PIN 27               // OUT pin, J14 header pin 12
 #define IR_OBJECT_LEVEL 0       // digital OUT level that means an object is detected
 #define OBJECT_CONFIRM_LOOPS 1  // trigger on the first loop where front IR + all-white LSA agree
-#define APPROACH_DUTY 40        // straight drive to bring the axle over the corner
+#define APPROACH_DUTY 30        // slower approach keeps side exits under the sensors for more samples
 #define APPROACH_MS 130         // depends on sensor bar to axle distance, tune on track
+#define APPROACH_RECHECK_MS 100 // briefly resample forward if an approach sees no exits
 #define TURN_DUTY 50            // steady pivot speed for every turn (50 = the max motion.c allows)
 // #define TURN_KICK_DUTY 50       // every turn starts at this (max motion.c allows) to break static friction,   (not used: turns run at a steady TURN_DUTY)
 // #define TURN_KICK_MS 80         // for this long, then drops to TURN_DUTY. Raise TURN_DUTY if turns stall half way   (not used: turns run at a steady TURN_DUTY)
@@ -87,7 +88,7 @@
  */
 #define KICK_DUTY 36
 #define KICK_MIN_DUTY 30
-#define KICK_MS 250
+#define KICK_MS 300
 
 /*
  * Which exit to take at a node (junction with 2+ exits):
@@ -130,7 +131,7 @@
  * Lost line recovery (gaps, acute turns sharper than 90)
  */
 #define LOST_CONFIRM 5          // loops with no line before turning toward where it went
-#define DEADEND_MS 180          // line gone this long (driving straight) before a dead end U-turn
+#define DEADEND_MS 350          // line gone this long (driving straight) before dead-end recovery
 #define CENTRED_CONFIRM 4       // dead end only if the line sat in the middle this many readings
                                 // in a row before it vanished (else it was a missed turn: search)
 #define START_HOLD_MS 1000      // (start now waits for the line, see START_ON_LINE_MS)
@@ -154,7 +155,7 @@
  * switches to black line following, raw 01110 (white middle, black outside) switches back.
  */
 #define INVERT_CONFIRM 3        // loops of raw 10001 (white outside, black middle) before black line following
-#define INVERT_EXIT_CONFIRM 5   // loops of raw 01110 (white middle, black outside) before going back to white line
+#define INVERT_EXIT_CONFIRM 3   // loops of raw 01110 (white middle, black outside) before going back to white line
 #define INVERT_HOLD_MS 300      // after a flip, only PID straight: no junction / sharp / dead end checks
 
 /*

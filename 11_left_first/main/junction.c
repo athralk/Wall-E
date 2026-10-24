@@ -67,10 +67,11 @@ int detect_branches(const lsa_state_t *lsa, int typical_width, bool was_centred)
 
     int width = last[0] - first[0] + 1;
     const int centre = LSA_COUNT / 2;
-    // Normally wider than the line. Just after a centred reading, the normal width is
-    // enough: a line sliding sideways can't go from centred to the outer sensor in one
-    // reading, a corner coming under the bar does (00100 / 01110 -> 00111)
-    int need = was_centred ? typical_width : typical_width + 1;
+    // Require the branch to be wider than the learned normal line even when the
+    // previous sample was centred. A smooth curve can move a normal-width line onto
+    // an outer sensor; treating that as a branch sends the robot into APPROACH.
+    (void)was_centred;
+    int need = typical_width + 1;
     if (width < need || first[0] > centre || last[0] < centre)
         return 0;
 
