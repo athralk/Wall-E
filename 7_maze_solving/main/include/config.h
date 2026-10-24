@@ -17,7 +17,7 @@
 /*
  * Line following speeds (FOLLOW state)
  */
-#define BASE_DUTY 28            // straight speed
+#define BASE_DUTY 32            // straight speed
 #define MIN_DUTY 20             // no wheel goes below this while following: when steering would
                                 // push the inner wheel lower, both wheels go up instead (no wheel stops)
 #define EDGE_BOOST_DUTY 12      // line out at the edge of the bar (|position| >= EDGE_BOOST_POS):
@@ -44,18 +44,16 @@
 #define LINE_WIDTH_MIN_SAMPLES 8 // fewer than this (start, colour flip): assume the widest plain line (3)
 
 /*
- * Side IR sensor (MH-B module), facing down, level with the LSA but out to the LEFT of it.
- * The main line never passes under it, so it only sees the line when a LEFT branch does:
- * that counts as a left branch straight away (no CORNER_CONFIRM) even if the LSA pattern missed it. Right branches still
- * come from the LSA alone. Tested with 8_demo_ir.
+ * Front-facing IR object detector (MH-B / FC-51-style digital module).
+ * GPIO 27 is no longer used for side-branch detection. The detector is sampled live
+ * each control loop and combined with an all-white reading from the bottom LSA.
+ * The supplied main.c demo reports OUT LOW over a bright reflective target, so 0 is
+ * the default active level. Change IR_OBJECT_LEVEL to 1 if your module behaves oppositely.
  */
-#define IR_ENABLED 0            // 1 = use the side IR. Off: LSA only
+#define IR_ENABLED 1            // 1 = enable the front-facing object detector
 #define IR_PIN 27               // OUT pin, J14 header pin 12
-#define IR_WHITE_LEVEL 0        // OUT level over white (the module pulls OUT low on a bright surface)
-// The pin is also watched by a high priority interrupt, so a branch that passes under the IR
-// between two loops (the IR spot is small) is still caught
-#define IR_REARM_MS 120         // after a turn the IR is ignored only this long (the LSA waits REARM_LOOPS
-                                // plain readings, which can be much longer and used to hide real branches)
+#define IR_OBJECT_LEVEL 0       // digital OUT level that means an object is detected
+#define OBJECT_CONFIRM_LOOPS 1  // trigger on the first loop where front IR + all-white LSA agree
 #define APPROACH_DUTY 40        // straight drive to bring the axle over the corner
 #define APPROACH_MS 130         // depends on sensor bar to axle distance, tune on track
 #define TURN_DUTY 50            // steady pivot speed for every turn (50 = the max motion.c allows)
@@ -155,7 +153,7 @@
  * Colour blind section: black line on a white block. Raw 10001 (white outside, black middle)
  * switches to black line following, raw 01110 (white middle, black outside) switches back.
  */
-#define INVERT_CONFIRM 6        // loops of raw 10001 (white outside, black middle) before black line following
+#define INVERT_CONFIRM 3        // loops of raw 10001 (white outside, black middle) before black line following
 #define INVERT_EXIT_CONFIRM 5   // loops of raw 01110 (white middle, black outside) before going back to white line
 #define INVERT_HOLD_MS 300      // after a flip, only PID straight: no junction / sharp / dead end checks
 
@@ -169,7 +167,7 @@
 #define PINK_MAX 800            // PLACEHOLDER
 #define PINK_CONFIRM 5          // loops the middle three sensors must stay in the band
 #define DROP_STOP_MS 500        // stand still so the object settles in the zone
-#define DROP_REVERSE_DUTY 30
+#define DROP_REVERSE_DUTY 40
 #define DROP_REVERSE_MS 200     // back off the object before the U-turn
 
 /*

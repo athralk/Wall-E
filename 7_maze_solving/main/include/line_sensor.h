@@ -36,7 +36,8 @@ typedef struct
     float position;           // -2 (line under left) .. +2 (line under right), in sensors, only valid if count > 0
     int raw_white_count;      // sensors seeing white, ignoring the inverted flag
     uint8_t raw_pattern;      // sensors seeing white as bits (like pattern), ignoring the inverted flag
-    bool ir_left;             // side IR (left of the bar) sees the line: a left branch is passing under it
+    bool ir_left;             // legacy side-IR field; false when GPIO 27 is used as the front detector
+    bool ir_object_detected;  // front-facing IR output matches IR_OBJECT_LEVEL
 } lsa_state_t;
 
 /*

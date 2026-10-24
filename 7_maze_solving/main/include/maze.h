@@ -11,6 +11,7 @@
  *   TURN_90   turn_90.c         90 degree pivot onto a junction exit / corner, or U-turn
  *   TURN_120  turn_120.c        pivot onto an acute (~120 degree) exit
  *   SEARCH    state_turns.c     sweep to find a lost line
+ *   OBJECT_DETECTED state_turns.c  front IR object + all-white LSA; starts a U-turn
  *   DONE      state_turns.c     end zone, stopped (resumes if put back on a line)
  *
  * Pink drop zone (drop_zone.c) and colour blind (colour_blind.c) are switched off for now,
@@ -33,6 +34,7 @@ typedef enum
     STATE_TURN_120 = 0x6,
     STATE_SEARCH = 0x8,
     STATE_DROP = 0x9,           // pink zone, switched off
+    STATE_OBJECT_DETECTED = 0xA,
     STATE_DONE = 0xF,
 } maze_state_t;
 
@@ -60,6 +62,7 @@ typedef struct
     int centred_count;              // readings in a row with the line in the middle of the bar
     uint32_t lost_since_ms;         // when the line vanished (0 = it hasn't)
     int line_side;                  // where the line was last seen off centre: -1 left, +1 right, 0 not yet
+    int object_confirm_count;       // consecutive loops with front IR active and all five LSA sensors white
     bool last_centred;              // line was in the middle of the bar the last time we saw it
     uint32_t hold_until_ms;         // start / colour flip: skip junction / sharp / dead end checks until then
     int rearm_count;                // after a junction / turn: plain line readings still needed
@@ -126,6 +129,7 @@ void finish_turn(maze_ctx_t *ctx);
  */
 void handle_follow(maze_ctx_t *ctx);
 void handle_approach(maze_ctx_t *ctx);
+void handle_object_detected(maze_ctx_t *ctx);
 void handle_search(maze_ctx_t *ctx);
 void handle_done(maze_ctx_t *ctx);
 

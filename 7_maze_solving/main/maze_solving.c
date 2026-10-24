@@ -46,6 +46,7 @@ static const char *state_name(maze_state_t state)
     case STATE_TURN_120: return "TURN_120";
     case STATE_SEARCH: return "SEARCH";
     case STATE_DROP: return "DROP";
+    case STATE_OBJECT_DETECTED: return "Object_detected";
     case STATE_DONE: return "DONE";
     }
     return "?";
@@ -62,9 +63,9 @@ void set_state(maze_ctx_t *ctx, maze_state_t next)
 {
     live_state = state_name(next);
     const lsa_state_t *lsa = &ctx->lsa;
-    ESP_LOGI(TAG, "%s -> %s after %lu ms  pattern %d%d%d%d%d  IR %d", state_name(ctx->state), state_name(next),
+    ESP_LOGI(TAG, "%s -> %s after %lu ms  pattern %d%d%d%d%d  front IR %d", state_name(ctx->state), state_name(next),
              (unsigned long)state_elapsed(ctx),
-             lsa->on_line[0], lsa->on_line[1], lsa->on_line[2], lsa->on_line[3], lsa->on_line[4], lsa->ir_left);
+             lsa->on_line[0], lsa->on_line[1], lsa->on_line[2], lsa->on_line[3], lsa->on_line[4], lsa->ir_object_detected);
     ctx->state = next;
     ctx->state_start_ms = now_ms();
 }
@@ -143,6 +144,30 @@ void maze_task(void *arg)
         line_sensor_update(&ctx.lsa);
         log_readings(&ctx.lsa);
 
+        // A front obstacle is a U-turn trigger only when the entire LSA also reads
+        // raw white. Check before FOLLOW/APPROACH so startup and end-zone handling
+        // cannot return or stop first. Either sensor condition by itself does nothing.
+        bool object_and_all_white = ctx.lsa.ir_object_detected &&
+                                    ctx.lsa.raw_white_count == LSA_COUNT;
+        bool can_handle_object = ctx.state == STATE_FOLLOW || ctx.state == STATE_APPROACH;
+        if (can_handle_object && object_and_all_white)
+        {
+            ctx.object_confirm_count++;
+            if (ctx.object_confirm_count >= OBJECT_CONFIRM_LOOPS)
+            {
+                ctx.object_confirm_count = 0;
+                ESP_LOGI(TAG, "front object + all-white LSA; entering Object_detected");
+                set_state(&ctx, STATE_OBJECT_DETECTED);
+                handle_object_detected(&ctx);
+                vTaskDelay(pdMS_TO_TICKS(LOOP_MS));
+                continue;
+            }
+        }
+        else
+        {
+            ctx.object_confirm_count = 0;
+        }
+
         // Colour blind section: off for now
         // if (ctx.state == STATE_FOLLOW || ctx.state == STATE_APPROACH)
         // {
@@ -160,6 +185,7 @@ void maze_task(void *arg)
         case STATE_TURN_120: handle_turn_120(&ctx); break;
         case STATE_SEARCH: handle_search(&ctx); break;
         case STATE_DROP: break;    // pink zone off
+        case STATE_OBJECT_DETECTED: handle_object_detected(&ctx); break;
         case STATE_DONE: handle_done(&ctx); break;
         }
 

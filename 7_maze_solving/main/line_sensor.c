@@ -25,40 +25,19 @@ static const int weights[LSA_COUNT] = {-2, -1, 0, 1, 2};
 static adc_handle_t line_sensor;
 static lsa_state_t latest;      // last reading, for the live LSA web page
 static bool inverted = false;   // true = black counts as the line (colour blind section)
-static volatile bool ir_latched = false;    // side IR went onto white since the last update
-
-#if IR_ENABLED
-static void IRAM_ATTR ir_isr(void *arg)
-{
-    ir_latched = true;
-}
-#endif
 
 esp_err_t line_sensor_init(void)
 {
 #if IR_ENABLED
-    // Side IR: plain digital input, the module drives OUT itself
+    // Front-facing IR detector: sample the module's digital OUT directly, as in main.c demo.
     gpio_config_t io_conf = {
         .pin_bit_mask = 1ULL << IR_PIN,
         .mode = GPIO_MODE_INPUT,
-        .pull_up_en = GPIO_PULLUP_ENABLE,       // on top of the module's own, for cleaner edges
+        .pull_up_en = GPIO_PULLUP_DISABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        // Edge onto white, so a short pass between two loops is remembered
-        .intr_type = IR_WHITE_LEVEL ? GPIO_INTR_POSEDGE : GPIO_INTR_NEGEDGE,
+        .intr_type = GPIO_INTR_DISABLE,
     };
     esp_err_t err = gpio_config(&io_conf);
-    if (err != ESP_OK)
-    {
-        return err;
-    }
-    // The ISR service may already be installed by another driver, that's fine
-    // IRAM + level 3: the ISR runs even during flash writes and isn't delayed by Wi-Fi interrupts
-    err = gpio_install_isr_service(ESP_INTR_FLAG_IRAM | ESP_INTR_FLAG_LEVEL3);
-    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE)
-    {
-        return err;
-    }
-    err = gpio_isr_handler_add(IR_PIN, ir_isr, NULL);
     if (err != ESP_OK)
     {
         return err;
@@ -166,15 +145,13 @@ void line_sensor_update(lsa_state_t *state)
         }
     }
 
-#if IR_ENABLED
-    // Side IR: same white / black rule as the LSA, flipped in the colour blind section.
-    // Normal track: also counts a white pass caught by the interrupt since the last loop.
-    bool ir_white = gpio_get_level(IR_PIN) == IR_WHITE_LEVEL;
-    bool latched = ir_latched;
-    ir_latched = false;
-    state->ir_left = inverted ? !ir_white : (ir_white || latched);
-#else
+    // GPIO 27 is a front-facing object detector now, not a side-branch sensor.
+    // Read its current digital level; the LSA white condition is checked in FOLLOW.
     state->ir_left = false;
+#if IR_ENABLED
+    state->ir_object_detected = (gpio_get_level(IR_PIN) == IR_OBJECT_LEVEL);
+#else
+    state->ir_object_detected = false;
 #endif
 
     // Coarse position from the on / off flags: average weight of the sensors on the line,

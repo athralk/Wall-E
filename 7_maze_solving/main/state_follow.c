@@ -99,31 +99,14 @@ void handle_follow(maze_ctx_t *ctx)
         int branches = detect_branches(lsa, line_width_typical(&ctx->line_width), ctx->last_centred);
         int side_line = detect_side_line(lsa);
         line_width_update(&ctx->line_width, lsa);
-        // Side IR (left of the bar) over a line while the LSA still has the main line:
-        // a left exit is passing under it. The main line never goes under the IR.
-        bool ir = lsa->ir_left && lsa->count > 0;
-        if (ir && !ctx->ir_prev)
-        {
-            ESP_LOGI(TAG, "IR sees a line on the left  pattern %d%d%d%d%d  %lu ms since turn", lsa->on_line[0],
-                     lsa->on_line[1], lsa->on_line[2], lsa->on_line[3], lsa->on_line[4],
-                     (unsigned long)(now_ms() - ctx->turn_end_ms));
-        }
-        ctx->ir_prev = ir;
         if (ctx->rearm_count > 0)
         {
-            // The IR is left out of "plain" so a badly set pot can't block re-arming for ever
+            // The front object detector is separate from LSA branch re-arming.
             bool plain = branches == 0 && lsa->count > 0;
             ctx->rearm_count = plain ? ctx->rearm_count - 1 : REARM_LOOPS;
             branches = 0;
             side_line = 0;  // the line we just turned off can still be beside the new one
         }
-        // The IR has its own, much shorter wait after a turn: it can't see the line we turned
-        // off, so it doesn't need the LSA's re-arm and would only miss real branches
-        if (now_ms() - ctx->turn_end_ms < IR_REARM_MS)
-        {
-            ir = false;
-        }
-
         // A separate second line beside the main one: remember when, for the acute exit check
         // (or a confirmed-width branch on that side: the arm can merge with the main line)
         if ((side_line & BRANCH_LEFT) || (branches & BRANCH_LEFT))
@@ -147,13 +130,7 @@ void handle_follow(maze_ctx_t *ctx)
         {
             ctx->node_confirm = ctx->hits_left = ctx->hits_right = 0;
         }
-        if (ir)
-        {
-            ctx->hits_left = CORNER_CONFIRM;
-            ctx->ir_seen = true;
-            ctx->side_left_ms = now_ms();
-        }
-        if (ctx->node_confirm >= CORNER_CONFIRM || ir)
+        if (ctx->node_confirm >= CORNER_CONFIRM)
         {
             ctx->node_confirm = 0;
             set_state(ctx, STATE_APPROACH);

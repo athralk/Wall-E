@@ -12,6 +12,7 @@
 #include "maze.h"
 #include "motion.h"
 #include "pid.h"
+#include "turn_90.h"
 
 static const char *TAG = "maze";
 
@@ -52,6 +53,17 @@ void start_search(maze_ctx_t *ctx, int dir)
     ctx->search_net_ms = 0;
     set_state(ctx, STATE_SEARCH);
     pivot(dir, SEARCH_DUTY);
+}
+
+/*
+ * OBJECT_DETECTED: FOLLOW has already confirmed the front IR and all-white LSA.
+ * Hand off to the existing U-turn implementation so the same line reacquisition,
+ * timeout and brake behavior are used as for a normal dead end.
+ */
+void handle_object_detected(maze_ctx_t *ctx)
+{
+    ESP_LOGI(TAG, "Object_detected: starting U-turn");
+    start_uturn(ctx);
 }
 
 /*
