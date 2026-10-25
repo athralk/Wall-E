@@ -19,7 +19,7 @@
 /*
  * Symmetric weights: position is in sensors, -2 (line under A0) .. +2 (under A4)
  */
-static const int weights[LSA_COUNT] = {-2, -1, 0, 1, 2};
+static const int weights[LSA_COUNT] = {-5, -3, 0, 3, 5};
 #define POSITION_SCALE 1.0f
 
 static adc_handle_t line_sensor;

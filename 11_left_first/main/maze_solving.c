@@ -45,6 +45,7 @@ static const char *state_name(maze_state_t state)
     case STATE_TURN_90: return "TURN_90";
     case STATE_TURN_120: return "TURN_120";
     case STATE_SEARCH: return "SEARCH";
+    case STATE_UTURN: return "UTURN";
     case STATE_DROP: return "DROP";
     case STATE_OBJECT_DETECTED: return "Object_detected";
     case STATE_DONE: return "DONE";
@@ -206,6 +207,7 @@ void maze_task(void *arg)
         case STATE_TURN_90: handle_turn_90(&ctx); break;
         case STATE_TURN_120: handle_turn_120(&ctx); break;
         case STATE_SEARCH: handle_search(&ctx); break;
+        case STATE_UTURN: handle_uturn(&ctx); break;
         case STATE_DROP: break;    // pink zone off
         case STATE_OBJECT_DETECTED: handle_object_detected(&ctx); break;
         case STATE_DONE: handle_done(&ctx); break;

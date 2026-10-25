@@ -187,7 +187,7 @@ void handle_follow(maze_ctx_t *ctx)
             // Line ended while it had sat in the middle of the bar for a while: dead end, but
             // only once it has stayed gone DEADEND_MS of driving straight, so a gap or a thin
             // line slipping between two sensors isn't taken as one
-            drive(BASE_DUTY, BASE_DUTY);
+            drive(APPROACH_DUTY, APPROACH_DUTY);
             if (now_ms() - ctx->lost_since_ms >= DEADEND_MS)
             {
                 ctx->lost_count = 0;

@@ -57,12 +57,11 @@
 #define APPROACH_DUTY 30        // slower approach keeps side exits under the sensors for more samples
 #define APPROACH_MS 130         // depends on sensor bar to axle distance, tune on track
 #define APPROACH_RECHECK_MS 100 // briefly resample forward if an approach sees no exits
-#define TURN_DUTY 50            // steady pivot speed for every turn (50 = the max motion.c allows)
+#define TURN_DUTY 50           // steady pivot speed for 90 degree turns and U-turns
+#define TURN_SLOW_DUTY 45      // U-turn final approach speed; keep above the motor stall range
 // #define TURN_KICK_DUTY 50       // every turn starts at this (max motion.c allows) to break static friction,   (not used: turns run at a steady TURN_DUTY)
 // #define TURN_KICK_MS 80         // for this long, then drops to TURN_DUTY. Raise TURN_DUTY if turns stall half way   (not used: turns run at a steady TURN_DUTY)
-// #define TURN_SLOW_DUTY 45       // once a sensor on the turn side sees the new line, finish the turn at this   (not used: turns run at a steady TURN_DUTY)
-                                // (was 40: below 45 the wheels stall mid turn)
-                                // speed so it eases onto the line instead of slamming past it
+// 90/120 degree turns stay at TURN_DUTY; UTURN eases to TURN_SLOW_DUTY near reacquisition.
 #define PIVOT_MIN_MS 40         // ignore the line for this long after starting a pivot
 #define PIVOT_TIMEOUT_MS 1500   // give up and search if the new line never shows
 #define BRAKE_DUTY 40           // short reverse pulse at the end of a turn, kills overshoot
@@ -131,7 +130,7 @@
  * Lost line recovery (gaps, acute turns sharper than 90)
  */
 #define LOST_CONFIRM 5          // loops with no line before turning toward where it went
-#define DEADEND_MS 350          // line gone this long (driving straight) before dead-end recovery
+#define DEADEND_MS 100          // line gone this long (driving straight) before dead-end recovery
 #define CENTRED_CONFIRM 4       // dead end only if the line sat in the middle this many readings
                                 // in a row before it vanished (else it was a missed turn: search)
 #define START_HOLD_MS 1000      // (start now waits for the line, see START_ON_LINE_MS)
@@ -155,7 +154,7 @@
  * switches to black line following, raw 01110 (white middle, black outside) switches back.
  */
 #define INVERT_CONFIRM 3        // loops of raw 10001 (white outside, black middle) before black line following
-#define INVERT_EXIT_CONFIRM 3   // loops of raw 01110 (white middle, black outside) before going back to white line
+#define INVERT_EXIT_CONFIRM 1   // loops of raw 01110 (white middle, black outside) before going back to white line
 #define INVERT_HOLD_MS 300      // after a flip, only PID straight: no junction / sharp / dead end checks
 
 /*

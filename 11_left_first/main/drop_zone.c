@@ -4,7 +4,7 @@
  * DROP state timeline:
  *   0 .. DROP_STOP_MS                      stand still
  *   .. DROP_STOP_MS + DROP_REVERSE_MS      reverse off the object
- *   then                                   U-turn (TURN, state_turns.c), then the maze as normal
+ *   then                                   U-turn (UTURN, uturn.c), then the maze as normal
  */
 #include "sra_board.h"
 #include "config.h"
@@ -62,6 +62,6 @@ void handle_drop(maze_ctx_t *ctx)
     else
     {
         ESP_LOGI(TAG, "object dropped, U-turn");
-        start_turn(ctx, TURN_UTURN, UTURN_DIR);
+        start_uturn(ctx);
     }
 }

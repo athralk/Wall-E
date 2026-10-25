@@ -2,7 +2,7 @@
 set(COMPONENT_REQUIRES )
 set(COMPONENT_PRIV_REQUIRES )
 
-set(COMPONENT_SRCS "maze_solving.c" "state_follow.c" "state_junction.c" "state_turns.c"
+set(COMPONENT_SRCS "maze_solving.c" "state_follow.c" "state_junction.c" "state_turns.c" "uturn.c"
                    "turn_90.c" "turn_120.c" "junction.c" "node_memory.c" "display.c"
                    "line_sensor.c" "motion.c" "pid.c" "tuning_http_server.c" "wifi_handler.c"
                    "colour_blind.c")

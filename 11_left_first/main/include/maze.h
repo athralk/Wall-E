@@ -8,7 +8,8 @@
  *   FOLLOW    state_follow.c    PID line following (smooth curves, 45 degree bends), spots
  *                               junctions, acute exits and dead ends
  *   APPROACH  state_junction.c  drive onto a junction, pick an exit
- *   TURN_90   turn_90.c         90 degree pivot onto a junction exit / corner, or U-turn
+ *   TURN_90   turn_90.c         90 degree pivot onto a junction exit / corner
+ *   UTURN     uturn.c            in-place 180 degree pivot at a dead end / obstacle
  *   TURN_120  turn_120.c        pivot onto an acute (~120 degree) exit
  *   SEARCH    state_turns.c     sweep to find a lost line
  *   OBJECT_DETECTED state_turns.c  front IR object + all-white LSA; starts a U-turn
@@ -33,19 +34,11 @@ typedef enum
     STATE_TURN_90 = 0x4,
     STATE_TURN_120 = 0x6,
     STATE_SEARCH = 0x8,
+    STATE_UTURN = 0x7,
     STATE_DROP = 0x9,           // pink zone, switched off
     STATE_OBJECT_DETECTED = 0xA,
     STATE_DONE = 0xF,
 } maze_state_t;
-
-/*
- * What a TURN_90 is for
- */
-typedef enum
-{
-    TURN_PIVOT,     // 90 degree exit at a junction or corner
-    TURN_UTURN,     // dead end, sets after_uturn
-} turn_kind_t;
 
 typedef struct
 {
@@ -76,10 +69,9 @@ typedef struct
     bool ir_prev;                   // side IR reading last loop, to log only when it first sees a line
 
     // Turns
-    turn_kind_t turn_kind;          // what the current TURN is for
     int turn_dir;                   // direction of the current turn / search, -1 left, +1 right
     bool left_old_line;             // TURN: centre sensor has come off the line we turned from
-    bool turn_slowed;               // TURN: start kick over, now at TURN_DUTY
+    bool turn_slowed;               // UTURN: final approach speed has been reduced
     bool turn_near;                 // TURN: a sensor on the turn side sees the new line, easing in at TURN_SLOW_DUTY
     uint32_t search_timeout;        // SEARCH: how long before sweeping the other way
     int32_t search_net_ms;          // SEARCH: time spun right minus time spun left (net rotation)
@@ -118,6 +110,8 @@ void set_state(maze_ctx_t *ctx, maze_state_t next);
  */
 void start_search(maze_ctx_t *ctx, int dir);
 void back_to_follow(maze_ctx_t *ctx);
+void start_uturn(maze_ctx_t *ctx);
+void handle_uturn(maze_ctx_t *ctx);
 
 /*
  * Shared by turn_90.c and turn_120.c (state_turns.c)
