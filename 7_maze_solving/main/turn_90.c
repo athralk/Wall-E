@@ -43,7 +43,6 @@ void handle_turn_90(maze_ctx_t *ctx)
 {
     uint32_t elapsed = state_elapsed(ctx);
     bool uturn = ctx->turn_kind == TURN_UTURN;
-
     if (!ctx->lsa.on_line[2])
         ctx->left_old_line = true;
 
